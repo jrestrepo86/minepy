@@ -1,6 +1,9 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
+'''
+varianza vs alfa
 
+'''
 import numpy as np
 from matplotlib import pyplot as plt
 
@@ -18,10 +21,11 @@ Net2 = Layers.T1(input_dim, dim_feedforward=30)
 Net3 = Layers.T1(input_dim, dim_feedforward=30)
 Net4 = Layers.T1(input_dim, dim_feedforward=30)
 # mine model
-model_ft1 = Mine(Net1, loss='mine_biased', alpha=0.01)
-model_ft2 = Mine(Net2, loss='mine', alpha=0.01)
-model_ft3 = Mine(Net3, loss='remine', alpha=0.01)
-model_ft4 = Mine(Net4, loss='remine', alpha=0.01)
+model_ft1 = Mine(Net1, loss='mine', alpha=0.01)
+model_ft2 = Mine(Net2, loss='mine', alpha=0.5)
+model_ft3 = Mine(Net3, loss='mine', alpha=0.98)
+model_ft4 = Mine(Net4, loss='mine_biased', alpha=0.98)
+# model_ft3 = Mine(Net1, loss='remine', alpha=0.01)
 # optimizer
 
 # Generate data
@@ -58,10 +62,10 @@ _, mi4 = model_ft4.optimize(X_train,
                             batchSize=bSize,
                             numEpochs=nEpoch)
 
-plt.plot(mi1, 'b', label='Normal Mine')
-plt.plot(mi2, 'r', label='EMA Mine Model T1')
-plt.plot(mi3, 'g', label='remine')
-plt.plot(mi4, 'r', label='EMA Mine Model T3')
+plt.plot(mi1, 'b', label='EMA a={0}'.format(0.01))
+plt.plot(mi2, 'r', label='EMA a={0}'.format(0.5))
+plt.plot(mi3, 'g', label='EMA a={0}'.format(0.8))
+plt.plot(mi4, 'y', label='Mine Biased')
 plt.plot(mi, 'k', label='true MI')
 plt.legend()
 plt.show()
