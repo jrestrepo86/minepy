@@ -127,3 +127,8 @@ class Mine(nn.Module):
         with torch.no_grad():
             mi = -self.forward(x, z, z_marg)
         return mi.item()
+
+    def netReset(self):
+        for layer in self.T.children():
+            if hasattr(layer, 'reset_parameters'):
+                layer.reset_parameters()

@@ -8,20 +8,18 @@ import minepy.mineLayers as Layers
 from minepy.minepy import Mine
 
 # parameters
-bSize = 1024
+bSize = 64
 nEpoch = 500
 
 # net
 input_dim = 2
-Net1 = Layers.T1(input_dim, dim_feedforward=30)
-Net2 = Layers.T1(input_dim, dim_feedforward=30)
-Net3 = Layers.T1(input_dim, dim_feedforward=30)
-Net4 = Layers.T1(input_dim, dim_feedforward=30)
+Net1 = Layers.T1(input_dim, dim_feedforward=20)
+Net2 = Layers.T1(input_dim, dim_feedforward=20)
+Net3 = Layers.T1(input_dim, dim_feedforward=20)
 # mine model
-model_ft1 = Mine(Net1, loss='mine_biased', alpha=0.01)
-model_ft2 = Mine(Net2, loss='mine', alpha=0.01)
-model_ft3 = Mine(Net3, loss='remine', alpha=0.01)
-model_ft4 = Mine(Net4, loss='remine', alpha=0.01)
+model_ft1 = Mine(Net1, loss='mine', alpha=0.01)
+model_ft2 = Mine(Net2, loss='mine', alpha=1)
+model_ft3 = Mine(Net3, loss='mine', alpha=0.0001)
 # optimizer
 
 # Generate data
@@ -36,7 +34,7 @@ mi4 = np.zeros((nEpoch, 1))
 cov_matrix = np.array([[1, rho], [rho, 1]])
 joint_samples_train = np.random.multivariate_normal(mean=mu,
                                                     cov=cov_matrix,
-                                                    size=(10000, 1))
+                                                    size=(1000, 1))
 X_train = np.squeeze(joint_samples_train[:, :, 0])
 Z_train = np.squeeze(joint_samples_train[:, :, 1])
 
@@ -53,15 +51,11 @@ _, mi3 = model_ft3.optimize(X_train,
                             Z_train,
                             batchSize=bSize,
                             numEpochs=nEpoch)
-_, mi4 = model_ft4.optimize(X_train,
-                            Z_train,
-                            batchSize=bSize,
-                            numEpochs=nEpoch)
 
-plt.plot(mi1, 'b', label='Normal Mine')
-plt.plot(mi2, 'r', label='EMA Mine Model T1')
-plt.plot(mi3, 'g', label='remine')
-plt.plot(mi4, 'r', label='EMA Mine Model T3')
+print('ture MI {0}'.format(mi[0]))
+plt.plot(mi1, 'b', label='alfa 0.01')
+plt.plot(mi2, 'r', label='0.5')
+plt.plot(mi3, 'g', label='0.0001')
 plt.plot(mi, 'k', label='true MI')
 plt.legend()
 plt.show()

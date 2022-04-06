@@ -74,3 +74,27 @@ class T3(nn.Module):
 
     def forward(self, x, z):
         return self.layers(torch.cat((x, z), dim=self.dim))
+
+
+class T3p(nn.Module):
+    '''
+        Linear Generator
+        https://github.com/gtegner/mine-pytorch/blob/master/mine/models/layers.py
+    '''
+
+    def __init__(self, input_dim, output_dim=1, dim_feedforward=100):
+        super().__init__()
+        self.name = 'T3'
+        self.dim = 1
+        self.layers = nn.Sequential(
+            nn.Linear(input_dim, dim_feedforward),
+            nn.LeakyReLU(),
+            # nn.BatchNorm1d(dim_feedforward),
+            nn.Linear(dim_feedforward, dim_feedforward),
+            # nn.LeakyReLU(),
+            # nn.BatchNorm1d(dim_feedforward),
+            nn.Linear(dim_feedforward, output_dim),
+        )
+
+    def forward(self, x, z):
+        return self.layers(torch.cat((x, z), dim=self.dim))

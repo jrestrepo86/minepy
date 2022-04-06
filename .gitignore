@@ -49,4 +49,6 @@ C*/
 
 # vimspectot
 *vimspector.json
-
+# images
+*.png
+*.jpg
