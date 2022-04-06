@@ -13,9 +13,6 @@ import minepy.mineTools as mineTools
 
 EPS = 1e-6
 
-device = 'cuda' if torch.cuda.is_available() else 'cpu'
-torch.device(device)
-
 
 class EMALoss(torch.autograd.Function):
 
@@ -53,8 +50,13 @@ def ema_loss(x, running_mean, alpha):
 
 class Mine(nn.Module):
 
-    def __init__(self, T, loss='mine', alpha=0.01, regWeight=2):
+    def __init__(self, T, loss='mine', alpha=0.01, regWeight=2, device=None):
         super().__init__()
+        if device is None:
+            self.device = 'cuda' if torch.cuda.is_available() else 'cpu'
+        else:
+            self.device = device
+        torch.device(self.device)
         self.running_mean = 0
         self.loss = loss
         self.alpha = alpha
@@ -62,7 +64,7 @@ class Mine(nn.Module):
         self.epochMI = []
         self.regWeight = regWeight
         self.targetVal = 0
-        self.T = T.to(device)
+        self.T = T.to(self.device)
 
     def forward(self, x, z, z_marg=None):
         if z_marg is None:
@@ -88,17 +90,17 @@ class Mine(nn.Module):
 
         return -t + second_term
 
-    def optimize(self, X, Z, batchSize, numEpochs, opt=None):
+    def optimize(self, X, Z, batchSize, numEpochs, opt=None, disableTqdm=True):
 
         if opt is None:
             opt = torch.optim.Adam(self.parameters(), lr=1e-4)
 
         self.train()  # Set model to training mode
-        for epoch in tqdm(range(numEpochs)):
+        for epoch in tqdm(range(numEpochs), disable=disableTqdm):
             mu_mi = 0
             for x, z in mineTools.batch(X, Z, batchSize):
-                x = x.to(device)
-                z = z.to(device)
+                x = x.to(self.device)
+                z = z.to(self.device)
                 opt.zero_grad()
                 with torch.set_grad_enabled(True):
                     loss = self.forward(x, z)
@@ -111,7 +113,7 @@ class Mine(nn.Module):
             #     print(f"It {epoch} - MI: {self.trainingMI}")
 
         self.MI = self.getMI(X, Z)
-        print(f"Training MI: {self.MI}")
+        # print(f"Training MI: {self.MI}")
         return self.MI, self.epochMI
 
     def getMI(self, x, z, z_marg=None):
@@ -122,8 +124,8 @@ class Mine(nn.Module):
             z = mineTools.toColVector(z)
             z = torch.from_numpy(z).float()
 
-        x = x.to(device)
-        z = z.to(device)
+        x = x.to(self.device)
+        z = z.to(self.device)
         with torch.no_grad():
             mi = -self.forward(x, z, z_marg)
         return mi.item()
