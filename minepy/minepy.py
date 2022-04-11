@@ -114,7 +114,7 @@ class Mine(nn.Module):
 
         self.MI = self.getMI(X, Z)
         # print(f"Training MI: {self.MI}")
-        return self.MI, self.epochMI
+        return self.MI, np.array(self.epochMI)
 
     def getMI(self, x, z, z_marg=None):
         if isinstance(x, np.ndarray):

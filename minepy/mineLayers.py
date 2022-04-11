@@ -64,10 +64,10 @@ class T3(nn.Module):
         self.dim = 1
         self.layers = nn.Sequential(
             nn.Linear(input_dim, dim_feedforward),
-            nn.LeakyReLU(),
             nn.BatchNorm1d(dim_feedforward),
+            nn.ReLU(),
             nn.Linear(dim_feedforward, dim_feedforward),
-            nn.LeakyReLU(),
+            nn.ReLU(),
             nn.BatchNorm1d(dim_feedforward),
             nn.Linear(dim_feedforward, output_dim),
         )
