@@ -36,6 +36,26 @@ class T1(nn.Module):
         return self.layers(torch.cat((x, z), dim=self.dim))
 
 
+class T11(nn.Module):
+
+    def __init__(self, input_dim, dim_feedforward=100, dropout=0):
+        super().__init__()
+        self.name = 'T1'
+        self.dim = 1
+        self.layers = nn.Sequential(
+            nn.Linear(input_dim, dim_feedforward),
+            nn.Dropout(p=dropout),
+            nn.ReLU(),
+            nn.Linear(dim_feedforward, dim_feedforward),
+            nn.Dropout(p=dropout),
+            nn.ReLU(),
+            nn.Linear(dim_feedforward, 1),
+        )
+
+    def forward(self, x):
+        return self.layers(x)
+
+
 class T2(nn.Module):
 
     def __init__(self, dim_feedforward=100):

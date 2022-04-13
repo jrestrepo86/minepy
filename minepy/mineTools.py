@@ -7,6 +7,7 @@ Minepy Tools
 
 import numpy as np
 import torch
+from scipy.interpolate import interp1d
 
 
 def toColVector(x):
@@ -43,3 +44,11 @@ def batch(x, z, batchSize=1, shuffle=True):
         batches.append((x_b, z_b))
 
     return batches
+
+
+def Interp(x, ntimes):
+    n = x.size
+    t = np.linspace(0, n, n)
+    f = interp1d(t, x, kind=2, copy=True, fill_value=(x[0], x[-1]))
+    tnew = np.linspace(0, n, ntimes * n)
+    return f(tnew)
