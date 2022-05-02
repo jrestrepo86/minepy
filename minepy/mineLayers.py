@@ -6,14 +6,32 @@ import torch.nn as nn
 from torch.nn import functional as F
 
 
-class ConcatLayer(nn.Module):
+class MineNet(nn.Module):
 
-    def __init__(self, dim=1):
+    def __init__(self, input_dim, dim_feedforward=100, rect='relu', dropout=0):
         super().__init__()
-        self.dim = dim
+        self.name = 'MineNet'
+        if rect == 'elu':
+            Rect1 = nn.ELU()
+            Rect2 = nn.ELU()
+        elif rect == 'leakyRelu':
+            Rect1 = nn.LeakyReLU()
+            Rect2 = nn.LeakyReLU()
+        else:
+            Rect1 = nn.ReLU()
+            Rect2 = nn.ReLU()
+        self.layers = nn.Sequential(
+            nn.Linear(input_dim, dim_feedforward),
+            nn.Dropout(p=dropout),
+            Rect1,
+            nn.Linear(dim_feedforward, dim_feedforward),
+            nn.Dropout(p=dropout),
+            Rect2,
+            nn.Linear(dim_feedforward, 1),
+        )
 
-    def forward(self, x, z):
-        return torch.cat((x, z), self.dim)
+    def forward(self, x):
+        return self.layers(x)
 
 
 class T1(nn.Module):
@@ -21,27 +39,6 @@ class T1(nn.Module):
     def __init__(self, input_dim, dim_feedforward=100, dropout=0):
         super().__init__()
         self.name = 'T1'
-        self.dim = 1
-        self.layers = nn.Sequential(
-            nn.Linear(input_dim, dim_feedforward),
-            nn.Dropout(p=dropout),
-            nn.ReLU(),
-            nn.Linear(dim_feedforward, dim_feedforward),
-            nn.Dropout(p=dropout),
-            nn.ReLU(),
-            nn.Linear(dim_feedforward, 1),
-        )
-
-    def forward(self, x, z):
-        return self.layers(torch.cat((x, z), dim=self.dim))
-
-
-class T11(nn.Module):
-
-    def __init__(self, input_dim, dim_feedforward=100, dropout=0):
-        super().__init__()
-        self.name = 'T1'
-        self.dim = 1
         self.layers = nn.Sequential(
             nn.Linear(input_dim, dim_feedforward),
             nn.Dropout(p=dropout),
@@ -56,20 +53,61 @@ class T11(nn.Module):
         return self.layers(x)
 
 
+class Tenee(nn.Module):
+
+    def __init__(self, input_dim, dim_feedforward=100, dropout=0.0):
+        super().__init__()
+        self.name = 'teneeNet'
+        self.layers = nn.Sequential(
+            nn.Linear(input_dim, dim_feedforward),
+            nn.Dropout(p=dropout),
+            # nn.ReLU(),
+            nn.ELU(),
+            nn.Linear(dim_feedforward, dim_feedforward),
+            nn.Dropout(p=dropout),
+            # nn.ReLU(),
+            nn.ELU(),
+            nn.Linear(dim_feedforward, 1),
+        )
+
+    def forward(self, x):
+        return self.layers(x)
+
+
+class T11(nn.Module):
+
+    def __init__(self, input_dim, dim_feedforward=100, dropout=0):
+        super().__init__()
+        self.name = 'T1'
+        self.dim = 1
+        self.layers = nn.Sequential(
+            nn.Linear(input_dim, dim_feedforward),
+            nn.Dropout(p=dropout),
+            nn.ReLU(),
+            # nn.ELU(),
+            nn.Linear(dim_feedforward, dim_feedforward),
+            nn.Dropout(p=dropout),
+            nn.ReLU(),
+            # nn.ELU(),
+            nn.Linear(dim_feedforward, 1),
+        )
+
+    def forward(self, x):
+        return self.layers(x)
+
+
 class T2(nn.Module):
 
-    def __init__(self, dim_feedforward=100):
+    def __init__(self, input_dim, dim_feedforward=100):
         # super(Net, self).__init__()
         super().__init__()
         self.name = 'T2'
-        self.fc1 = nn.Linear(1, dim_feedforward)
-        self.fc2 = nn.Linear(1, dim_feedforward)
+        self.fc1 = nn.Linear(input_dim, dim_feedforward)
+        self.fc2 = nn.Linear(input_dim, dim_feedforward)
         self.fc3 = nn.Linear(dim_feedforward, 1)
 
     def forward(self, x, z):
-        h1 = F.relu(self.fc1(x) + self.fc2(z))
-        h2 = self.fc3(h1)
-        return h2
+        return self.fc3(F.relu(self.fc1(x) + self.fc2(z)))
 
 
 class T3(nn.Module):
@@ -81,7 +119,6 @@ class T3(nn.Module):
     def __init__(self, input_dim, output_dim=1, dim_feedforward=100):
         super().__init__()
         self.name = 'T3'
-        self.dim = 1
         self.layers = nn.Sequential(
             nn.Linear(input_dim, dim_feedforward),
             nn.BatchNorm1d(dim_feedforward),
@@ -92,8 +129,8 @@ class T3(nn.Module):
             nn.Linear(dim_feedforward, output_dim),
         )
 
-    def forward(self, x, z):
-        return self.layers(torch.cat((x, z), dim=self.dim))
+    def forward(self, x):
+        return self.layers(x)
 
 
 class T3p(nn.Module):

@@ -10,6 +10,7 @@ import torch.nn as nn
 from tqdm import tqdm
 
 import minepy.mineTools as mineTools
+from minepy.mineLayers import MineNet
 
 EPS = 1e-6
 
@@ -50,7 +51,13 @@ def ema_loss(x, running_mean, alpha):
 
 class Mine(nn.Module):
 
-    def __init__(self, T, loss='mine', alpha=0.01, regWeight=2, device=None):
+    def __init__(self,
+                 Net=None,
+                 input_dim=2,
+                 loss='mine',
+                 alpha=0.01,
+                 regWeight=1,
+                 device=None):
         super().__init__()
         if device is None:
             self.device = 'cuda' if torch.cuda.is_available() else 'cpu'
@@ -64,14 +71,22 @@ class Mine(nn.Module):
         self.epochMI = []
         self.regWeight = regWeight
         self.targetVal = 0
-        self.T = T.to(self.device)
+
+        if Net is None:
+            self.Net = MineNet(input_dim,
+                               dim_feedforward=100,
+                               rect='relu',
+                               dropout=0)
+        else:
+            self.Net = Net
+        self.MineNet.to(self.device)
 
     def forward(self, x, z, z_marg=None):
         if z_marg is None:
             z_marg = z[torch.randperm(x.shape[0])]
 
-        t = self.T(x, z).mean()
-        t_marg = self.T(x, z_marg)
+        t = self.Net(torch.cat((x, z), dim=1)).mean()
+        t_marg = self.Net(torch.cat((x, z_marg), dim=1))
 
         if self.loss in ['mine']:
             second_term, self.running_mean = ema_loss(t_marg,
@@ -87,6 +102,9 @@ class Mine(nn.Module):
                 t_marg.shape[0])
             second_term += self.regWeight * torch.pow(
                 second_term - self.targetVal, 2)
+        else:
+            second_term = torch.logsumexp(t_marg, 0) - math.log(
+                t_marg.shape[0])  # mine_biased default
 
         return -t + second_term
 
@@ -96,9 +114,9 @@ class Mine(nn.Module):
             opt = torch.optim.Adam(self.parameters(), lr=1e-4)
 
         self.train()  # Set model to training mode
-        for epoch in tqdm(range(numEpochs), disable=disableTqdm):
+        for _ in tqdm(range(numEpochs), disable=disableTqdm):
             mu_mi = 0
-            for x, z in mineTools.batch(X, Z, batchSize):
+            for x, z in mineTools.MIbatch(X, Z, batchSize):
                 x = x.to(self.device)
                 z = z.to(self.device)
                 opt.zero_grad()
@@ -109,14 +127,10 @@ class Mine(nn.Module):
                     mu_mi = -loss.item()
             self.epochMI.append(mu_mi)
 
-            # if epoch % (numEpochs // 3) == 0:
-            #     print(f"It {epoch} - MI: {self.trainingMI}")
-
-        self.MI = self.getMI(X, Z)
-        # print(f"Training MI: {self.MI}")
+        self.MI = self.evalMI(X, Z)
         return self.MI, np.array(self.epochMI)
 
-    def getMI(self, x, z, z_marg=None):
+    def evalMI(self, x, z, z_marg=None):
         if isinstance(x, np.ndarray):
             x = mineTools.toColVector(x)
             x = torch.from_numpy(x).float()
@@ -131,6 +145,6 @@ class Mine(nn.Module):
         return mi.item()
 
     def netReset(self):
-        for layer in self.T.children():
+        for layer in self.Net.children():
             if hasattr(layer, 'reset_parameters'):
                 layer.reset_parameters()
