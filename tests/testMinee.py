@@ -1,10 +1,11 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
 import numpy as np
 from matplotlib import pyplot as plt
 
 import minepy.mineLayers as Layers
 from minepy.minee import Minee
 from minepy.minepy import Mine
-from minepy.mineTools import Interp
 
 # net
 input_dim_x = 1

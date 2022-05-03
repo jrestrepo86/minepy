@@ -45,7 +45,6 @@ def ema_loss(x, running_mean, alpha):
     t_log = EMALoss.apply(x, running_mean)
 
     # Recalculate ema
-
     return t_log, running_mean
 
 
@@ -54,9 +53,11 @@ class Mine(nn.Module):
     def __init__(self,
                  Net=None,
                  input_dim=2,
-                 loss='mine',
+                 loss='mine_biased',
                  alpha=0.01,
                  regWeight=1,
+                 targetVal=0,
+                 clip=1,
                  device=None):
         super().__init__()
         if device is None:
@@ -66,11 +67,12 @@ class Mine(nn.Module):
         torch.device(self.device)
         self.running_mean = 0
         self.loss = loss
-        self.alpha = alpha
-        self.MI = -20
+        self.alpha = alpha.to(self.device)
+        self.regWeight = regWeight.to(self.device)
+        self.targetVal = targetVal.to(self.device)
+        self.clip = clip.to(self.device)
         self.epochMI = []
-        self.regWeight = regWeight
-        self.targetVal = 0
+        self.MI = -20
 
         if Net is None:
             self.Net = MineNet(input_dim,
@@ -79,7 +81,7 @@ class Mine(nn.Module):
                                dropout=0)
         else:
             self.Net = Net
-        self.MineNet.to(self.device)
+        self.Net.to(self.device)
 
     def forward(self, x, z, z_marg=None):
         if z_marg is None:
@@ -94,14 +96,16 @@ class Mine(nn.Module):
                                                       self.alpha)
         elif self.loss in ['fdiv']:
             second_term = torch.exp(t_marg - 1).mean()
-        elif self.loss in ["mine_biased"]:
-            second_term = torch.logsumexp(t_marg, 0) - math.log(
-                t_marg.shape[0])
         elif self.loss in ["remine"]:
             second_term = torch.logsumexp(t_marg, 0) - math.log(
                 t_marg.shape[0])
             second_term += self.regWeight * torch.pow(
                 second_term - self.targetVal, 2)
+        elif self.loss in ['clip']:
+            if self.clip is not None:
+                t_marg = torch.clamp(t_marg, min=-self.clip, max=self.clip)
+            second_term = torch.logsumexp(t_marg, 0) - math.log(
+                t_marg.shape[0])
         else:
             second_term = torch.logsumexp(t_marg, 0) - math.log(
                 t_marg.shape[0])  # mine_biased default
@@ -111,7 +115,7 @@ class Mine(nn.Module):
     def optimize(self, X, Z, batchSize, numEpochs, opt=None, disableTqdm=True):
 
         if opt is None:
-            opt = torch.optim.Adam(self.parameters(), lr=1e-4)
+            opt = torch.optim.Adam(self.Net.parameters(), lr=1e-4)
 
         self.train()  # Set model to training mode
         for _ in tqdm(range(numEpochs), disable=disableTqdm):
@@ -137,6 +141,7 @@ class Mine(nn.Module):
         if isinstance(z, np.ndarray):
             z = mineTools.toColVector(z)
             z = torch.from_numpy(z).float()
+        self.clip = None
 
         x = x.to(self.device)
         z = z.to(self.device)
