@@ -6,29 +6,45 @@ import torch.nn as nn
 from torch.nn import functional as F
 
 
+def get_activation_fn(afn):
+    activation_functions = {
+        "linear": lambda: lambda x: x,
+        "relu": nn.ReLU,
+        "relu6": nn.ReLU6,
+        "elu": nn.ELU,
+        "prelu": nn.PReLU,
+        "leaky_relu": nn.LeakyReLU,
+        "threshold": nn.Threshold,
+        "hardtanh": nn.Hardtanh,
+        "sigmoid": nn.Sigmoid,
+        "tanh": nn.Tanh,
+        "log_sigmoid": nn.LogSigmoid,
+        "softplus": nn.Softplus,
+        "softshrink": nn.Softshrink,
+        "softsign": nn.Softsign,
+        "tanhshrink": nn.Tanhshrink,
+    }
+
+    if afn not in activation_functions:
+        raise ValueError(
+            f"'{afn}' is not included in activation_functions. Use below one \n {activation_functions.keys()}"
+        )
+
+    return activation_functions[afn]
+
+
 class MineNet(nn.Module):
 
-    def __init__(self, input_dim, dim_feedforward=100, rect='relu', dropout=0):
+    def __init__(self, input_dim, hidden_dim=100, afn='relu', nLayers=2):
         super().__init__()
         self.name = 'MineNet'
-        if rect == 'elu':
-            Rect1 = nn.ELU()
-            Rect2 = nn.ELU()
-        elif rect == 'leakyRelu':
-            Rect1 = nn.LeakyReLU()
-            Rect2 = nn.LeakyReLU()
-        else:
-            Rect1 = nn.ReLU()
-            Rect2 = nn.ReLU()
-        self.layers = nn.Sequential(
-            nn.Linear(input_dim, dim_feedforward),
-            nn.Dropout(p=dropout),
-            Rect1,
-            nn.Linear(dim_feedforward, dim_feedforward),
-            nn.Dropout(p=dropout),
-            Rect2,
-            nn.Linear(dim_feedforward, 1),
-        )
+        activation_fn = get_activation_fn(afn)
+        # final_activation_fn = get_activation_fn('elu')
+        seq = [nn.Linear(input_dim, hidden_dim), activation_fn()]
+        for _ in range(nLayers):
+            seq += [nn.Linear(hidden_dim, hidden_dim), activation_fn()]
+        seq += [nn.Linear(hidden_dim, 1)]
+        self.layers = nn.Sequential(*seq)
 
     def forward(self, x):
         return self.layers(x)
