@@ -37,7 +37,7 @@ def simMutualInfo():
     model_ft1 = Mine(input_dim=2, loss=loss1)
     model_ft2 = Mine(input_dim=2, loss=loss2, alpha=0.01)
     model_ft3 = Mine(input_dim=2, loss=loss3, regWeight=1, targetVal=0)
-    model_ft4 = Mine(input_dim=2, loss=loss4, clip=10)
+    model_ft4 = Mine(input_dim=2, loss=loss4, clip=15)
 
     mu = np.array([0, 0])
     Rho = np.linspace(-0.99, 0.99, 21)
@@ -48,8 +48,8 @@ def simMutualInfo():
     mi4 = np.zeros(*mi.shape)
 
     # Training
-    bSize = 500
-    nEpoch = 100
+    bSize = 300
+    nEpoch = 300
     for i, rho in enumerate(tqdm(Rho)):
 
         # Generate data
@@ -149,5 +149,5 @@ def simVariance():
 
 
 if __name__ == "__main__":
-    # simMutualInfo()
-    simVariance()
+    simMutualInfo()
+    # simVariance()

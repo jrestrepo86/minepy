@@ -69,9 +69,9 @@ class Mine(nn.Module):
                  hidden_dim=50,
                  nLayers=2,
                  alpha=0.01,
-                 regWeight=1,
-                 targetVal=0,
-                 clip=1,
+                 regWeight=1.0,
+                 targetVal=0.0,
+                 clip=1.0,
                  device=None):
         super().__init__()
         if device is None:
@@ -84,7 +84,7 @@ class Mine(nn.Module):
         self.alpha = alpha
         self.regWeight = regWeight
         self.targetVal = targetVal
-        self.clip = torch.tensor(clip, requires_grad=False)
+        self.clip = clip
         self.epochMI = []
         self.MI = -20
 
@@ -133,7 +133,9 @@ class Mine(nn.Module):
     def optimize(self, X, Z, batchSize, numEpochs, opt=None, disableTqdm=True):
 
         if opt is None:
-            opt = torch.optim.Adam(self.Net.parameters(), lr=1e-4)
+            opt = torch.optim.Adam(self.Net.parameters(),
+                                   lr=1e-4,
+                                   betas=(0.5, 0.999))
 
         self.train()  # Set model to training mode
         for i in tqdm(range(numEpochs), disable=disableTqdm):
