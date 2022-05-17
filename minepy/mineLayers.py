@@ -33,11 +33,11 @@ def get_activation_fn(afn):
     return activation_functions[afn]
 
 
-class MineNet(nn.Module):
+class customNet(nn.Module):
 
-    def __init__(self, input_dim, hidden_dim=100, afn='relu', nLayers=2):
+    def __init__(self, input_dim, hidden_dim, afn, nLayers):
         super().__init__()
-        self.name = 'MineNet'
+        self.name = 'custom Net'
         activation_fn = get_activation_fn(afn)
         # final_activation_fn = get_activation_fn('elu')
         seq = [nn.Linear(input_dim, hidden_dim), activation_fn()]
@@ -48,6 +48,46 @@ class MineNet(nn.Module):
 
     def forward(self, x):
         return self.layers(x)
+
+
+class MineNet(nn.Module):
+
+    def __init__(self, input_dim, hidden_dim=100, afn='relu', nLayers=2):
+        super().__init__()
+        self.name = 'MineNet'
+        self.Net = customNet(input_dim=input_dim,
+                             hidden_dim=hidden_dim,
+                             afn=afn,
+                             nLayers=nLayers)
+
+    def forward(self, x, z):
+        return self.Net.forward(torch.cat((x, z), dim=1))
+
+
+class MineeNet(nn.Module):
+
+    def __init__(self, input_dim, hidden_dim=100, afn='relu', nLayers=2):
+        super().__init__()
+        self.name = 'MineeNet'
+
+        self.NetX = customNet(input_dim=input_dim,
+                              hidden_dim=hidden_dim,
+                              afn=afn,
+                              nLayers=nLayers)
+        self.NetZ = customNet(input_dim=input_dim,
+                              hidden_dim=hidden_dim,
+                              afn=afn,
+                              nLayers=nLayers)
+        self.NetXZ = customNet(input_dim=2 * input_dim,
+                               hidden_dim=hidden_dim,
+                               afn=afn,
+                               nLayers=nLayers)
+
+    def forward(self, x, z):
+        outX = self.NetX.forward(x)
+        outZ = self.NetZ.forward(z)
+        outXZ = self.NetXZ.forward(torch.cat((x, z), dim=1))
+        return outX, outZ, outXZ
 
 
 class T1(nn.Module):

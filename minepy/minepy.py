@@ -86,25 +86,22 @@ class Mine(nn.Module):
         self.targetVal = targetVal
         self.clip = clip
         self.epochMI = []
-        self.MI = -20
 
         if Net is None:
-            self.Net = MineNet(
+            Net = MineNet(
                 input_dim,
                 hidden_dim=hidden_dim,
                 afn=afn,
                 nLayers=nLayers,
             )
-        else:
-            self.Net = Net
-        self.Net.to(self.device)
+        self.Net = Net.to(self.device)
 
     def forward(self, x, z, z_marg=None):
         if z_marg is None:
-            z_marg = z[torch.randperm(x.shape[0])]
+            z_marg = z[torch.randperm(z.shape[0])]
 
-        t = self.Net(torch.cat((x, z), dim=1)).mean()
-        t_marg = self.Net(torch.cat((x, z_marg), dim=1))
+        t = self.Net(x, z).mean()
+        t_marg = self.Net(x, z_marg)
 
         if self.loss in ['mine']:
             second_term, self.running_mean = ema_loss(t_marg,
@@ -130,11 +127,18 @@ class Mine(nn.Module):
 
         return -t + second_term
 
-    def optimize(self, X, Z, batchSize, numEpochs, opt=None, disableTqdm=True):
+    def optimize(self,
+                 X,
+                 Z,
+                 batchSize,
+                 numEpochs,
+                 opt=None,
+                 lr=1e-4,
+                 disableTqdm=True):
 
         if opt is None:
             opt = torch.optim.Adam(self.Net.parameters(),
-                                   lr=1e-4,
+                                   lr=lr,
                                    betas=(0.5, 0.999))
 
         self.train()  # Set model to training mode
@@ -151,8 +155,8 @@ class Mine(nn.Module):
                     mu_mi = -loss.item()
             self.epochMI.append(mu_mi)
 
-        self.MI = self.evalMI(X, Z)
-        return self.MI, np.array(self.epochMI)
+        MI = self.evalMI(X, Z)
+        return MI, np.array(self.epochMI)
 
     def evalMI(self, x, z, z_marg=None):
         if isinstance(x, np.ndarray):
