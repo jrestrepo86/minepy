@@ -37,10 +37,10 @@ def MIbatch(x, z, batchSize=1, shuffle=True):
 
     if isinstance(x, np.ndarray):
         x = toColVector(x)
-        x = torch.from_numpy(x).float()
+        x = torch.from_numpy(x.copy()).float()
     if isinstance(z, np.ndarray):
         z = toColVector(z)
-        z = torch.from_numpy(z).float()
+        z = torch.from_numpy(z.copy()).float()
 
     n = len(x)
 

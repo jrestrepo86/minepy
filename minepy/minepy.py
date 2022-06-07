@@ -161,10 +161,10 @@ class Mine(nn.Module):
     def evalMI(self, x, z, z_marg=None):
         if isinstance(x, np.ndarray):
             x = mineTools.toColVector(x)
-            x = torch.from_numpy(x).float()
+            x = torch.from_numpy(x.copy()).float()
         if isinstance(z, np.ndarray):
             z = mineTools.toColVector(z)
-            z = torch.from_numpy(z).float()
+            z = torch.from_numpy(z.copy()).float()
         # self.clip = None
         x = x.to(self.device)
         z = z.to(self.device)
