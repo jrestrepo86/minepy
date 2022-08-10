@@ -14,20 +14,21 @@ from minepy.mineLayers import customNet
 
 
 class Minee(nn.Module):
-
-    def __init__(self,
-                 NetX=None,
-                 NetZ=None,
-                 NetXZ=None,
-                 input_dim=2,
-                 afn='relu',
-                 hidden_dim=50,
-                 nLayers=2,
-                 device=None):
+    def __init__(
+        self,
+        NetX=None,
+        NetZ=None,
+        NetXZ=None,
+        input_dim=1,
+        afn="elu",
+        hidden_dim=100,
+        nLayers=1,
+        device=None,
+    ):
 
         super().__init__()
         if device is None:
-            self.device = 'cuda' if torch.cuda.is_available() else 'cpu'
+            self.device = "cuda" if torch.cuda.is_available() else "cpu"
         else:
             self.device = device
         torch.device(self.device)
@@ -36,37 +37,46 @@ class Minee(nn.Module):
         self.epochHz = []
         self.epochHxz = []
         if NetX is None:
-            NetX = customNet(input_dim=input_dim,
-                             hidden_dim=hidden_dim,
-                             afn=afn,
-                             nLayers=nLayers)
+            NetX = customNet(
+                input_dim=input_dim,
+                hidden_dim=hidden_dim,
+                afn=afn,
+                nLayers=nLayers,
+            )
+            # nn.init.normal_(NetX.weight, std=0.02)
+            # nn.init.constant_(NetX.bias, 0)
         if NetZ is None:
-            NetZ = customNet(input_dim=input_dim,
-                             hidden_dim=hidden_dim,
-                             afn=afn,
-                             nLayers=nLayers)
+            NetZ = customNet(
+                input_dim=input_dim,
+                hidden_dim=hidden_dim,
+                afn=afn,
+                nLayers=nLayers,
+            )
+            # nn.init.normal_(NetZ.weight, std=0.02)
+            # nn.init.constant_(NetZ.bias, 0)
         if NetXZ is None:
-            NetXZ = customNet(input_dim=2 * input_dim,
-                              hidden_dim=hidden_dim,
-                              afn=afn,
-                              nLayers=nLayers)
+            NetXZ = customNet(
+                input_dim=2 * input_dim,
+                hidden_dim=hidden_dim,
+                afn=afn,
+                nLayers=nLayers,
+            )
+            # nn.init.normal_(NetXZ.weight, std=0.02)
+            # nn.init.constant_(NetXZ.bias, 0)
 
         self.NetX = NetX.to(self.device)
         self.NetZ = NetZ.to(self.device)
         self.NetXZ = NetXZ.to(self.device)
 
-    def uniformSample(self, x, z):
+    def uniformSample(self, x):
 
         max_x, _ = torch.max(x, dim=0, keepdim=True)
         min_x, _ = torch.min(x, dim=0, keepdim=True)
-        max_z, _ = torch.max(z, dim=0, keepdim=True)
-        min_z, _ = torch.min(z, dim=0, keepdim=True)
 
         ux = (max_x - min_x) * torch.rand(
-            (self.ref_batchSize, x.shape[1]), device=self.device) + min_x
-        uz = (max_z - min_z) * torch.rand(
-            (self.ref_batchSize, z.shape[1]), device=self.device) + min_z
-        return ux, uz
+            (self.ref_batchSize, x.shape[1]), device=self.device
+        ) + min_x
+        return ux
 
     def div(self, Net, data, ref):
         mean_f = Net(data).mean()
@@ -74,33 +84,31 @@ class Minee(nn.Module):
         return mean_f - log_mean_ef_ref
 
     def forward(self, x, z):
-        ux, uz = self.uniformSample(x, z)
+        ux = self.uniformSample(x)
+        uz = self.uniformSample(z)
         loss_x = -self.div(self.NetX, x, ux)
         loss_z = -self.div(self.NetZ, z, uz)
-        loss_xz = -self.div(self.NetXZ, torch.cat(
-            (x, z), dim=1), torch.cat((ux, uz), dim=1))
+        loss_xz = -self.div(
+            self.NetXZ, torch.cat((x, z), dim=1), torch.cat((ux, uz), dim=1)
+        )
 
         return loss_x, loss_z, loss_xz
 
-    def optimize(self,
-                 X,
-                 Z,
-                 batchSize,
-                 numEpochs,
-                 batchScale=1,
-                 optimizer=None,
-                 lr=1e-4,
-                 disableTqdm=True):
+    def optimize(
+        self,
+        X,
+        Z,
+        batchSize,
+        numEpochs,
+        batchScale=1,
+        optimizer=None,
+        lr=1e-4,
+        disableTqdm=True,
+    ):
         if optimizer is None:
-            opt_x = torch.optim.Adam(self.NetX.parameters(),
-                                     lr=lr,
-                                     betas=(0.5, 0.999))
-            opt_z = torch.optim.Adam(self.NetZ.parameters(),
-                                     lr=lr,
-                                     betas=(0.5, 0.999))
-            opt_xz = torch.optim.Adam(self.NetXZ.parameters(),
-                                      lr=lr,
-                                      betas=(0.5, 0.999))
+            opt_x = torch.optim.Adam(self.NetX.parameters(), lr=lr)
+            opt_z = torch.optim.Adam(self.NetZ.parameters(), lr=lr)
+            opt_xz = torch.optim.Adam(self.NetXZ.parameters(), lr=lr)
 
         self.NetX.train()  # Set model to training mode
         self.NetZ.train()
@@ -124,8 +132,7 @@ class Minee(nn.Module):
                     opt_x.step()
                     opt_z.step()
                     opt_xz.step()
-                    hx, hz, hxz = -loss_x.item(), -loss_z.item(
-                    ), -loss_xz.item()
+                    hx, hz, hxz = -loss_x.item(), -loss_z.item(), -loss_xz.item()
                     mi = hxz - hx - hz
             self.epochHx.append(hx)
             self.epochHz.append(hz)
@@ -134,8 +141,12 @@ class Minee(nn.Module):
 
         Hx, Hz, Hxz, MI = self.getMI(X, Z)
         vals = (Hx, Hz, Hxz, MI)
-        EpochVals = (np.array(self.epochHx), np.array(self.epochHz),
-                     np.array(self.epochHxz), np.array(self.epochMI))
+        EpochVals = (
+            np.array(self.epochHx),
+            np.array(self.epochHz),
+            np.array(self.epochHxz),
+            np.array(self.epochMI),
+        )
 
         return vals, EpochVals
 
@@ -158,11 +169,11 @@ class Minee(nn.Module):
 
     def netReset(self):
         for layer in self.NetX.children():
-            if hasattr(layer, 'reset_parameters'):
+            if hasattr(layer, "reset_parameters"):
                 layer.reset_parameters()
         for layer in self.NetZ.children():
-            if hasattr(layer, 'reset_parameters'):
+            if hasattr(layer, "reset_parameters"):
                 layer.reset_parameters()
         for layer in self.NetXZ.children():
-            if hasattr(layer, 'reset_parameters'):
+            if hasattr(layer, "reset_parameters"):
                 layer.reset_parameters()

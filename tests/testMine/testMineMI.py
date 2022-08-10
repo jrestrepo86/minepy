@@ -9,26 +9,26 @@ from tqdm import tqdm
 import minepy.mineLayers as Layers
 from minepy.minepy import Mine
 
-matplotlib.use('Qt5Agg')
+matplotlib.use("Qt5Agg")
 
 
 def plotSim01(ax, Rho, TrueMi, MI, label):
-    ax.plot(Rho, TrueMi, '.k', label='True')
-    ax.plot(Rho, MI, 'b', label=label)
-    ax.legend(loc='upper center')
+    ax.plot(Rho, TrueMi, ".k", label="True")
+    ax.plot(Rho, MI, "b", label=label)
+    ax.legend(loc="upper center")
     ax.set_title(label)
 
 
 def simMutualInfo():
 
     # Net
-    loss1 = 'mine_biased'
-    loss2 = 'mine'
-    loss3 = 'remine'
+    loss1 = "mine_biased"
+    loss2 = "mine"
+    loss3 = "remine"
     # loss4 = 'clip'
     model_ft1 = Mine(input_dim=2, loss=loss1)
     model_ft2 = Mine(input_dim=2, loss=loss2, alpha=0.01)
-    model_ft3 = Mine(input_dim=2, loss=loss3, regWeight=1, targetVal=0)
+    model_ft3 = Mine(input_dim=2, loss=loss3, regWeight=1, targetVal=0.0)
     # model_ft4 = Mine(input_dim=2, loss=loss4, clip=15)
 
     mu = np.array([0, 0])
@@ -46,9 +46,9 @@ def simMutualInfo():
 
         # Generate data
         cov_matrix = np.array([[1, rho], [rho, 1]])
-        joint_samples_train = np.random.multivariate_normal(mean=mu,
-                                                            cov=cov_matrix,
-                                                            size=(10000, 1))
+        joint_samples_train = np.random.multivariate_normal(
+            mean=mu, cov=cov_matrix, size=(10000, 1)
+        )
         X = np.squeeze(joint_samples_train[:, :, 0])
         Z = np.squeeze(joint_samples_train[:, :, 1])
 

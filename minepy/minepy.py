@@ -142,7 +142,7 @@ class Mine(nn.Module):
                                    betas=(0.5, 0.999))
 
         self.train()  # Set model to training mode
-        for i in tqdm(range(numEpochs), disable=disableTqdm):
+        for _ in tqdm(range(numEpochs), disable=disableTqdm):
             mu_mi = 0
             for x, z in mineTools.MIbatch(X, Z, batchSize):
                 x = x.to(self.device)
