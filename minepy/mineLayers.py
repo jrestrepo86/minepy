@@ -38,7 +38,6 @@ class customNet(nn.Module):
         super().__init__()
         self.name = "custom Net"
         activation_fn = get_activation_fn(afn)
-        # final_activation_fn = get_activation_fn('elu')
         seq = [nn.Linear(input_dim, hidden_dim), activation_fn()]
         for _ in range(nLayers):
             seq += [nn.Linear(hidden_dim, hidden_dim), activation_fn()]

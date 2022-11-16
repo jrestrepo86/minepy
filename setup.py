@@ -10,7 +10,7 @@ setup(
     name="minepy",
     version="0.1",
     description="Mutual information neural estimation",
-    ong_description=long_description,
+    long_description=long_description,
     long_description_content_type="text/markdown",
     url="https://github.com/jrestrepo86/mine.git",
     author="Juan F. Restrepo",
