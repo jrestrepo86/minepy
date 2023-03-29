@@ -68,7 +68,7 @@ class Mine(nn.Module):
                  afn='relu',
                  hidden_dim=50,
                  nLayers=2,
-                 alpha=0.01,
+                 alpha=0.1,
                  regWeight=1.0,
                  targetVal=0.0,
                  clip=1.0,
@@ -110,8 +110,11 @@ class Mine(nn.Module):
         elif self.loss in ['fdiv']:
             second_term = torch.exp(t_marg - 1).mean()
         elif self.loss in ["remine"]:
-            second_term = torch.logsumexp(t_marg, 0) - math.log(
-                t_marg.shape[0])
+            second_term, self.running_mean = ema_loss(t_marg,
+                                                      self.running_mean,
+                                                      self.alpha)
+            # second_term = torch.logsumexp(t_marg, 0) - math.log(
+            #     t_marg.shape[0])
             second_term += self.regWeight * torch.pow(
                 second_term - self.targetVal, 2)
         elif self.loss in ['clip']:
@@ -133,13 +136,13 @@ class Mine(nn.Module):
                  batchSize,
                  numEpochs,
                  opt=None,
-                 lr=1e-4,
+                 lr=5e-4,
                  disableTqdm=True):
 
         if opt is None:
             opt = torch.optim.Adam(self.Net.parameters(),
                                    lr=lr,
-                                   betas=(0.5, 0.999))
+                                   betas=(0.9, 0.999))
 
         self.train()  # Set model to training mode
         for _ in tqdm(range(numEpochs), disable=disableTqdm):

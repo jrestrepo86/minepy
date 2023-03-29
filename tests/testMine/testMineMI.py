@@ -25,10 +25,11 @@ def simMutualInfo():
     loss1 = "mine_biased"
     loss2 = "mine"
     loss3 = "remine"
-    # loss4 = 'clip'
+    loss4 = 'remine'
     model_ft1 = Mine(input_dim=2, loss=loss1)
-    model_ft2 = Mine(input_dim=2, loss=loss2, alpha=0.01)
+    model_ft2 = Mine(input_dim=2, loss=loss2, alpha=0.1)
     model_ft3 = Mine(input_dim=2, loss=loss3, regWeight=1, targetVal=0.0)
+    model_ft4 = Mine(input_dim=2, loss=loss3, regWeight=0.1, targetVal=0.0)
     # model_ft4 = Mine(input_dim=2, loss=loss4, clip=15)
 
     mu = np.array([0, 0])
@@ -37,18 +38,22 @@ def simMutualInfo():
     mi1 = np.zeros(*mi.shape)
     mi2 = np.zeros(*mi.shape)
     mi3 = np.zeros(*mi.shape)
-    # mi4 = np.zeros(*mi.shape)
+    mi4 = np.zeros(*mi.shape)
 
     # Training
-    bSize = 300
-    nEpoch = 100
+    bSize = 1000
+    nEpoch = 1000
     for i, rho in enumerate(tqdm(Rho)):
 
+        model_ft1 = Mine(input_dim=2, loss=loss1)
+        model_ft2 = Mine(input_dim=2, loss=loss2, alpha=0.1)
+        model_ft3 = Mine(input_dim=2, loss=loss3, regWeight=1, targetVal=0.0)
+        model_ft4 = Mine(input_dim=2, loss=loss3, regWeight=0.1, targetVal=0.0)
         # Generate data
         cov_matrix = np.array([[1, rho], [rho, 1]])
-        joint_samples_train = np.random.multivariate_normal(
-            mean=mu, cov=cov_matrix, size=(10000, 1)
-        )
+        joint_samples_train = np.random.multivariate_normal(mean=mu,
+                                                            cov=cov_matrix,
+                                                            size=(10000, 1))
         X = np.squeeze(joint_samples_train[:, :, 0])
         Z = np.squeeze(joint_samples_train[:, :, 1])
 
@@ -58,10 +63,10 @@ def simMutualInfo():
         mi1[i], _ = model_ft1.optimize(X, Z, batchSize=bSize, numEpochs=nEpoch)
         mi2[i], _ = model_ft2.optimize(X, Z, batchSize=bSize, numEpochs=nEpoch)
         mi3[i], _ = model_ft3.optimize(X, Z, batchSize=bSize, numEpochs=nEpoch)
-        # mi4[i], _ = model_ft4.optimize(X, Z, batchSize=bSize, numEpochs=nEpoch)
-        model_ft1.netReset()
-        model_ft2.netReset()
-        model_ft3.netReset()
+        mi4[i], _ = model_ft4.optimize(X, Z, batchSize=bSize, numEpochs=nEpoch)
+        # model_ft1.netReset()
+        # model_ft2.netReset()
+        # model_ft3.netReset()
         # model_ft4.netReset()
 
     # Plot
@@ -69,7 +74,7 @@ def simMutualInfo():
     plotSim01(axs[0, 0], Rho, mi, mi1, label=loss1)
     plotSim01(axs[0, 1], Rho, mi, mi2, label=loss2)
     plotSim01(axs[1, 0], Rho, mi, mi3, label=loss3)
-    # plotSim01(axs[1, 1], Rho, mi, mi4, label=loss4)
+    plotSim01(axs[1, 1], Rho, mi, mi4, label=loss4 + '_0.1')
     plt.show()
 
 
