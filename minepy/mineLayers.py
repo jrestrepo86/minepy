@@ -34,6 +34,7 @@ def get_activation_fn(afn):
 
 
 class customNet(nn.Module):
+
     def __init__(self, input_dim, hidden_dim, afn, nLayers):
         super().__init__()
         self.name = "custom Net"
@@ -43,12 +44,12 @@ class customNet(nn.Module):
             seq += [nn.Linear(hidden_dim, hidden_dim), activation_fn()]
         seq += [nn.Linear(hidden_dim, 1)]
         layers = nn.Sequential(*seq)
-        layers.apply(self._init_weights)
+        # layers.apply(self._init_weights)
         self.layers = layers
 
     def _init_weights(self, layer):
         if isinstance(layer, nn.Linear):
-            nn.init.normal_(layer.weight, 0.0, 0.02)
+            nn.init.normal_(layer.weight, 0, 0.02)
             nn.init.constant_(layer.bias, 0)
 
     def forward(self, x):
@@ -56,18 +57,21 @@ class customNet(nn.Module):
 
 
 class MineNet(nn.Module):
+
     def __init__(self, input_dim, hidden_dim=100, afn="relu", nLayers=2):
         super().__init__()
         self.name = "MineNet"
-        self.Net = customNet(
-            input_dim=input_dim, hidden_dim=hidden_dim, afn=afn, nLayers=nLayers
-        )
+        self.Net = customNet(input_dim=input_dim,
+                             hidden_dim=hidden_dim,
+                             afn=afn,
+                             nLayers=nLayers)
 
     def forward(self, x, z):
         return self.Net.forward(torch.cat((x, z), dim=1))
 
 
 class MineeNet(nn.Module):
+
     def __init__(
         self,
         input_dim,
@@ -112,6 +116,7 @@ class MineeNet(nn.Module):
 
 
 class T1(nn.Module):
+
     def __init__(self, input_dim, dim_feedforward=100, dropout=0):
         super().__init__()
         self.name = "T1"
@@ -130,6 +135,7 @@ class T1(nn.Module):
 
 
 class Tenee(nn.Module):
+
     def __init__(self, input_dim, dim_feedforward=100, dropout=0.0):
         super().__init__()
         self.name = "teneeNet"
@@ -150,6 +156,7 @@ class Tenee(nn.Module):
 
 
 class T11(nn.Module):
+
     def __init__(self, input_dim, dim_feedforward=100, dropout=0):
         super().__init__()
         self.name = "T1"
@@ -171,6 +178,7 @@ class T11(nn.Module):
 
 
 class T2(nn.Module):
+
     def __init__(self, input_dim, dim_feedforward=100):
         # super(Net, self).__init__()
         super().__init__()
