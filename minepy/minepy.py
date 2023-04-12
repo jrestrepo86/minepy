@@ -85,7 +85,6 @@ class Mine(nn.Module):
         self.regWeight = regWeight
         self.targetVal = targetVal
         self.clip = clip
-        self.epochMI = []
 
         if Net is None:
             Net = MineNet(
@@ -144,6 +143,7 @@ class Mine(nn.Module):
                                    lr=lr,
                                    betas=(0.9, 0.999))
 
+        self.epochMI = []
         self.train()  # Set model to training mode
         for _ in tqdm(range(numEpochs), disable=disableTqdm):
             mu_mi = 0
@@ -179,3 +179,81 @@ class Mine(nn.Module):
         for layer in self.Net.children():
             if hasattr(layer, 'reset_parameters'):
                 layer.reset_parameters()
+
+    def optimize_validate(self,
+                          X,
+                          Z,
+                          batchSize,
+                          numEpochs,
+                          val_size=0.2,
+                          opt=None,
+                          lr=1e-3,
+                          patience=100,
+                          min_delta=0.05,
+                          disableTqdm=True):
+        if opt is None:
+            opt = torch.optim.Adam(self.Net.parameters(),
+                                   lr=lr,
+                                   betas=(0.9, 0.999))
+
+        X = mineTools.toColVector(X)
+        Z = mineTools.toColVector(Z)
+        split_index = np.rint(X.size * val_size).astype(int)
+        Xval = X[:split_index].copy()
+        Zval = Z[:split_index].copy()
+        Xtrain = X[split_index:].copy()
+        Ztrain = Z[split_index:].copy()
+        Xtrain = torch.from_numpy(Xtrain.copy()).float().to(self.device)
+        Ztrain = torch.from_numpy(Ztrain.copy()).float().to(self.device)
+        Xval = torch.from_numpy(Xval.copy()).float().to(self.device)
+        Zval = torch.from_numpy(Zval.copy()).float().to(self.device)
+        X = torch.from_numpy(X.copy()).float().to(self.device)
+        Z = torch.from_numpy(Z.copy()).float().to(self.device)
+
+        epoch_mi_train = []
+        epoch_mi_val = []
+        early_stopping = mineTools.EarlyStopping(patience=patience,
+                                                 min_delta=min_delta)
+
+        running_mean_val = None
+        running_mean_train = None
+
+        self.train()  # Set model to training mode
+        for i in tqdm(range(numEpochs), disable=disableTqdm):
+            for x, z in mineTools.MIbatch(Xtrain, Ztrain, batchSize):
+                x = x.to(self.device)
+                z = z.to(self.device)
+                opt.zero_grad()
+                with torch.set_grad_enabled(True):
+                    loss = self.forward(x, z)
+                    loss.backward()
+                    opt.step()
+
+            # Evaluate over train and validation sets, running means
+            with torch.no_grad():
+                train_mi = self.forward(Xtrain, Ztrain).item()
+                val_mi = self.forward(Xval, Zval).item()
+                if running_mean_val is None:
+                    running_mean_val = val_mi
+                else:
+                    running_mean_val = ema(val_mi, 0.01, running_mean_val)
+                if running_mean_train is None:
+                    running_mean_train = train_mi
+                else:
+                    running_mean_train = ema(train_mi, 0.01,
+                                             running_mean_train)
+
+                epoch_mi_train.append(running_mean_train)
+                epoch_mi_val.append(running_mean_val)
+
+            # early stopping
+            early_stopping(running_mean_val)
+            if early_stopping.early_stop:
+                final_epoch = i
+                print("We are at epoch:", final_epoch)
+                break
+
+        epoch_mi_train = -np.array(epoch_mi_train)
+        epoch_mi_val = -np.array(epoch_mi_val)
+        MI = epoch_mi_val.max()
+        return MI, epoch_mi_val, epoch_mi_train, final_epoch
