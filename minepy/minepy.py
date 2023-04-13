@@ -250,7 +250,7 @@ class Mine(nn.Module):
             early_stopping(running_mean_val)
             if early_stopping.early_stop:
                 final_epoch = i
-                print("We are at epoch:", final_epoch)
+                # print("We are at epoch:", final_epoch)
                 break
 
         epoch_mi_train = -np.array(epoch_mi_train)
