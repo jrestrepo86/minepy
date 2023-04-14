@@ -196,19 +196,25 @@ class Mine(nn.Module):
                                    lr=lr,
                                    betas=(0.9, 0.999))
 
+        # split_index = np.rint(X.size * val_size).astype(int)
         X = mineTools.toColVector(X)
         Z = mineTools.toColVector(Z)
-        split_index = np.rint(X.size * val_size).astype(int)
-        Xval = X[:split_index].copy()
-        Zval = Z[:split_index].copy()
-        Xtrain = X[split_index:].copy()
-        Ztrain = Z[split_index:].copy()
+        val_size = int(val_size * X.size)
+        train_size = int(X.size - val_size)
+        split_index = np.random.randint(0, train_size)
+        val_inds = np.zeros(X.shape[0], dtype=bool)
+        val_inds[split_index:split_index + val_size] = True
+        train_inds = np.logical_not(val_inds)
+
+        Xval = X[val_inds, :]
+        Zval = Z[val_inds, :]
+        Xtrain = X[train_inds, :]
+        Ztrain = Z[train_inds, :]
+
         Xtrain = torch.from_numpy(Xtrain.copy()).float().to(self.device)
         Ztrain = torch.from_numpy(Ztrain.copy()).float().to(self.device)
         Xval = torch.from_numpy(Xval.copy()).float().to(self.device)
         Zval = torch.from_numpy(Zval.copy()).float().to(self.device)
-        X = torch.from_numpy(X.copy()).float().to(self.device)
-        Z = torch.from_numpy(Z.copy()).float().to(self.device)
 
         epoch_mi_train = []
         epoch_mi_val = []
@@ -221,8 +227,8 @@ class Mine(nn.Module):
         self.train()  # Set model to training mode
         for i in tqdm(range(numEpochs), disable=disableTqdm):
             for x, z in mineTools.MIbatch(Xtrain, Ztrain, batchSize):
-                x = x.to(self.device)
-                z = z.to(self.device)
+                # x = x.to(self.device)
+                # z = z.to(self.device)
                 opt.zero_grad()
                 with torch.set_grad_enabled(True):
                     loss = self.forward(x, z)

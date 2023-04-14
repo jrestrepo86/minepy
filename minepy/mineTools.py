@@ -17,6 +17,7 @@ def toColVector(x):
     x = x.reshape(x.shape[0], -1)
     if x.shape[0] < x.shape[1]:
         x = x.T
+    x.reshape((-1, 1))
     return x
 
 
