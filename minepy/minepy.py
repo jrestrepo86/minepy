@@ -273,4 +273,4 @@ class Mine(nn.Module):
                     epoch_mi_test, final_epoch, ind_max_val, ind_max_stop,
                     Xval_out, Zval_out)
         else:
-            return MI_VAL, MI_TEST, MI_ST, final_epoch
+            return MI_VAL, MI_TEST, MI_ST, ind_max_val, ind_max_stop, final_epoch
