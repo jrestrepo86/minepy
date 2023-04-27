@@ -190,6 +190,7 @@ class Mine(nn.Module):
                           lr=1e-3,
                           patience=100,
                           min_delta=0.05,
+                          verbose=False,
                           disableTqdm=True):
         if opt is None:
             opt = torch.optim.Adam(self.Net.parameters(),
@@ -202,33 +203,35 @@ class Mine(nn.Module):
         val_size = int(val_size * X.size)
         train_size = int(X.size - val_size)
         split_index = np.random.randint(0, train_size)
+        # split_index = 2500
         val_inds = np.zeros(X.shape[0], dtype=bool)
         val_inds[split_index:split_index + val_size] = True
         train_inds = np.logical_not(val_inds)
 
+        if verbose:
+            Xval_out = X[val_inds, :]
+            Zval_out = Z[val_inds, :]
+
+        X = torch.from_numpy(X.copy()).float().to(self.device)
+        Z = torch.from_numpy(Z.copy()).float().to(self.device)
         Xval = X[val_inds, :]
         Zval = Z[val_inds, :]
+
         Xtrain = X[train_inds, :]
         Ztrain = Z[train_inds, :]
 
-        Xtrain = torch.from_numpy(Xtrain.copy()).float().to(self.device)
-        Ztrain = torch.from_numpy(Ztrain.copy()).float().to(self.device)
-        Xval = torch.from_numpy(Xval.copy()).float().to(self.device)
-        Zval = torch.from_numpy(Zval.copy()).float().to(self.device)
-
-        epoch_mi_train = []
-        epoch_mi_val = []
         early_stopping = mineTools.EarlyStopping(patience=patience,
                                                  min_delta=min_delta)
 
-        running_mean_val = None
-        running_mean_train = None
+        epoch_mi_val = []
+        epoch_mi_val_earlyst = []
+        epoch_mi_test = []
+
+        running_mean_earlyst = None
 
         self.train()  # Set model to training mode
         for i in tqdm(range(numEpochs), disable=disableTqdm):
             for x, z in mineTools.MIbatch(Xtrain, Ztrain, batchSize):
-                # x = x.to(self.device)
-                # z = z.to(self.device)
                 opt.zero_grad()
                 with torch.set_grad_enabled(True):
                     loss = self.forward(x, z)
@@ -237,28 +240,37 @@ class Mine(nn.Module):
 
             # Evaluate over train and validation sets, running means
             with torch.no_grad():
-                train_mi = self.forward(Xtrain, Ztrain).item()
                 val_mi = self.forward(Xval, Zval).item()
-                if running_mean_val is None:
-                    running_mean_val = val_mi
+                test_mi = self.forward(X, Z).item()
+                if running_mean_earlyst is None:
+                    running_mean_earlyst = val_mi
                 else:
-                    running_mean_val = ema(val_mi, 0.01, running_mean_val)
-                if running_mean_train is None:
-                    running_mean_train = train_mi
-                else:
-                    running_mean_train = ema(train_mi, 0.01,
-                                             running_mean_train)
+                    running_mean_earlyst = ema(val_mi, 0.01,
+                                               running_mean_earlyst)
 
-                epoch_mi_train.append(running_mean_train)
-                epoch_mi_val.append(running_mean_val)
+                epoch_mi_val_earlyst.append(running_mean_earlyst)
+                epoch_mi_val.append(val_mi)
+                epoch_mi_test.append(test_mi)
 
             # early stopping
-            early_stopping(running_mean_val)
+            early_stopping(running_mean_earlyst)
             if early_stopping.early_stop:
                 break
 
-        epoch_mi_train = -np.array(epoch_mi_train)
         epoch_mi_val = -np.array(epoch_mi_val)
+        epoch_mi_test = -np.array(epoch_mi_test)
+        epoch_mi_val_earlyst = -np.array(epoch_mi_val_earlyst)
+
         final_epoch = i + 1
-        MI = epoch_mi_val.max()
-        return MI, epoch_mi_val, epoch_mi_train, final_epoch
+        ind_max_val = np.argmax(epoch_mi_val)
+        ind_max_stop = np.argmax(epoch_mi_val_earlyst)
+        MI_VAL = epoch_mi_val[ind_max_val]
+        MI_TEST = epoch_mi_test[ind_max_val]
+        MI_ST = epoch_mi_test[ind_max_stop]
+
+        if verbose:
+            return (MI_VAL, MI_TEST, MI_ST, epoch_mi_val, epoch_mi_val_earlyst,
+                    epoch_mi_test, final_epoch, ind_max_val, ind_max_stop,
+                    Xval_out, Zval_out)
+        else:
+            return MI_VAL, MI_TEST, MI_ST, final_epoch

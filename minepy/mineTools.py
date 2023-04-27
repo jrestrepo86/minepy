@@ -12,7 +12,7 @@ from scipy.interpolate import interp1d
 
 def toColVector(x):
     """
-    Change vectors to colum vectors
+    Change vectors to column vectors
     """
     x = x.reshape(x.shape[0], -1)
     if x.shape[0] < x.shape[1]:
