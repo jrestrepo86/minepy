@@ -52,3 +52,6 @@ C*/
 # images
 *.png
 *.jpg
+
+# lightning
+lightning_logs/
