@@ -144,12 +144,12 @@ class Mine(LightningModule):
 
     def validation_step(self, batch, batch_idx):
         x, z = batch
-        val_loss = self.loss(x, z)
+        val_loss = self.loss(x, z).detach()
         # calculate ema_val_loss
         if self.ema_val_loss is None:
             self.ema_val_loss = val_loss
         else:
-            self.ema_val_loss = ema(val_loss, 0.05, self.ema_val_loss)
+            self.ema_val_loss = ema(val_loss, 0.01, self.ema_val_loss)
 
         self.val_loss_epoch.append(val_loss.item())
         self.ema_val_loss_epoch.append(self.ema_val_loss.item())
@@ -157,7 +157,8 @@ class Mine(LightningModule):
         test_loss = self.loss(self.x, self.z)
         self.test_loss_epoch.append(test_loss.item())
         self.log_dict({'val_loss': self.ema_val_loss, 'test_loss': test_loss})
-        return {'val_loss': self.ema_val_loss, 'test_loss': test_loss}
+        # return {'val_loss': self.ema_val_loss, 'test_loss': test_loss}
+        # return {'val_loss': self.ema_val_loss, 'test_loss': test_loss}
 
     def get_mi(self):
         self.calc_loss_curves()
@@ -255,12 +256,13 @@ class Mine(LightningModule):
                               num_nodes=num_nodes,
                               strategy=strategy,
                               max_epochs=max_epochs,
+                              callbacks=callbacks,
+                              deterministic=False,
+                              val_check_interval=1.0,
                               logger=self.verbose,
                               enable_checkpointing=self.verbose,
                               enable_progress_bar=self.verbose,
                               enable_model_summary=self.verbose,
-                              deterministic=False,
-                              callbacks=callbacks,
                               detect_anomaly=self.verbose)
             trainer.fit(model=self,
                         train_dataloaders=train_dataloader,
