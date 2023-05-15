@@ -34,7 +34,7 @@ def embedding(x, m, tau):
     return V
 
 
-def MIbatch(x, z, batchSize=1, shuffle=True):
+def MIbatch(x, z, batch_size=1, shuffle=True):
 
     if isinstance(x, np.ndarray):
         x = toColVector(x)
@@ -51,9 +51,9 @@ def MIbatch(x, z, batchSize=1, shuffle=True):
         z = z[rand_perm]
 
     batches = []
-    for i in range(n // batchSize):
-        x_b = x[i * batchSize:(i + 1) * batchSize]
-        z_b = z[i * batchSize:(i + 1) * batchSize]
+    for i in range(n // batch_size):
+        x_b = x[i * batch_size:(i + 1) * batch_size]
+        z_b = z[i * batch_size:(i + 1) * batch_size]
 
         batches.append((x_b, z_b))
 
@@ -78,6 +78,28 @@ class EarlyStopping:
             self.counter += 1
             if self.counter >= self.patience:
                 self.early_stop = True
+
+
+class EarlyStopping02:
+
+    def __init__(self, patience=5, delta=0):
+        self.patience = patience
+        self.delta = np.abs(delta)
+        self.counter = 0
+        self.early_stop = False
+        self.min_loss = np.inf
+
+    def __call__(self, loss):
+        if torch.abs(loss - self.min_loss) <= self.delta:
+            self.counter += 1
+        else:
+            if loss < self.min_loss:
+                self.min_loss = loss
+                self.counter = 0
+            else:
+                self.counter += 1
+        if self.counter >= self.patience:
+            self.early_stop = True
 
 
 def TEbatch(source,

@@ -95,19 +95,27 @@ class MineNet(nn.Module):
             second_term, self.running_mean = ema_loss(t_marg,
                                                       self.running_mean,
                                                       self.alpha)
+
+            mi = t - second_term
+            loss = -mi
         elif self.loss in ['fdiv']:
             second_term = torch.exp(t_marg - 1).mean()
+            mi = t - second_term
+            loss = -mi
         elif self.loss in ["remine"]:
-            second_term, self.running_mean = ema_loss(t_marg,
-                                                      self.running_mean,
-                                                      self.alpha)
-            second_term += self.regWeight * torch.pow(
+            second_term = torch.logsumexp(t_marg, 0) - math.log(
+                t_marg.shape[0])  # mine_biased as default
+
+            mi = t - second_term
+            loss = -mi + self.regWeight * torch.pow(
                 second_term - self.targetVal, 2)
         else:
             second_term = torch.logsumexp(t_marg, 0) - math.log(
                 t_marg.shape[0])  # mine_biased as default
+            mi = t - second_term
+            loss = -mi
 
-        return -t + second_term
+        return loss, mi
 
 
 class Mine(LightningModule):
@@ -120,7 +128,7 @@ class Mine(LightningModule):
         nLayers=3,
         loss='mine_biased',
         alpha=0.01,
-        regWeight=1.0,
+        regWeight=1,
         targetVal=0.0,
     ):
         super().__init__()
@@ -130,55 +138,60 @@ class Mine(LightningModule):
         self.ema_val_loss = None
         self.calc_curves = False
         self.val_loss_epoch = []
-        self.test_loss_epoch = []
+        self.val_mi_epoch = []
+        self.test_mi_epoch = []
         self.ema_val_loss_epoch = []
 
     def loss(self, x, z):
-        return self.net.forward(x, z)
+        loss, mi = self.net.forward(x, z)
+        return loss, mi
 
     def training_step(self, batch, batch_idx):
         x, z = batch
-        loss = self.loss(x, z)
+        loss, _ = self.loss(x, z)
         self.log('train_loss', loss)
         return loss
 
     def validation_step(self, batch, batch_idx):
         x, z = batch
-        val_loss = self.loss(x, z).detach()
+        val_loss, val_mi = self.loss(x, z)
+        val_loss = val_loss.detach()
+        val_mi = val_mi.detach()
         # calculate ema_val_loss
         if self.ema_val_loss is None:
             self.ema_val_loss = val_loss
         else:
             self.ema_val_loss = ema(val_loss, 0.01, self.ema_val_loss)
 
-        self.val_loss_epoch.append(val_loss.item())
+        self.val_mi_epoch.append(val_mi.item())
         self.ema_val_loss_epoch.append(self.ema_val_loss.item())
         # test loss
-        test_loss = self.loss(self.x, self.z)
-        self.test_loss_epoch.append(test_loss.item())
-        self.log_dict({'val_loss': self.ema_val_loss, 'test_loss': test_loss})
+        _, test_mi = self.loss(self.x, self.z)
+        self.test_mi_epoch.append(test_mi.item())
+        self.log('val_loss', self.ema_val_loss)
+        return self.ema_val_loss
         # return {'val_loss': self.ema_val_loss, 'test_loss': test_loss}
         # return {'val_loss': self.ema_val_loss, 'test_loss': test_loss}
 
     def get_mi(self):
         self.calc_loss_curves()
-        ind_max_stop = np.argmax(self.ema_val_loss_epoch)
-        ind_max_val = np.argmax(self.val_loss_epoch)
-        mi_val = self.val_loss_epoch[ind_max_val]
-        mi_test = self.test_loss_epoch[ind_max_val]
-        mi_stop = self.test_loss_epoch[ind_max_stop]
-        fepoch = self.val_loss_epoch.size
+        ind_max_stop = np.argmax(self.ema_val_mi_epoch)
+        ind_max_val = np.argmax(self.val_mi_epoch)
+        mi_val = self.val_mi_epoch[ind_max_val]
+        mi_test = self.test_mi_epoch[ind_max_val]
+        mi_stop = self.test_mi_epoch[ind_max_stop]
+        fepoch = self.val_mi_epoch.size
         return (mi_val, mi_test, mi_stop, ind_max_val, ind_max_stop, fepoch)
 
     def calc_loss_curves(self):
         if self.calc_curves:
             pass
         else:
-            self.val_loss_epoch = -np.array(self.val_loss_epoch)
-            self.test_loss_epoch = -np.array(self.test_loss_epoch)
-            self.ema_val_loss_epoch = -np.array(self.ema_val_loss_epoch)
+            self.val_mi_epoch = np.array(self.val_mi_epoch)
+            self.test_mi_epoch = np.array(self.test_mi_epoch)
+            self.ema_val_mi_epoch = -np.array(self.ema_val_loss_epoch)
             self.calc_curves = True
-        return self.val_loss_epoch, self.test_loss_epoch, self.ema_val_loss_epoch
+        return self.val_mi_epoch, self.test_mi_epoch, self.ema_val_mi_epoch
 
     def configure_optimizers(self):
         optimizer = torch.optim.Adam(self.parameters(),
