@@ -8,7 +8,7 @@ with open("README.md", "r", encoding="utf-8") as fh:
 
 setup(
     name="minepy",
-    version="0.1",
+    version="0.2",
     description="Mutual information neural estimation",
     long_description=long_description,
     long_description_content_type="text/markdown",
@@ -16,9 +16,8 @@ setup(
     author="Juan F. Restrepo",
     author_email="juan.restrepo@uner.edu.ar",
     license="MIT",
-    # packages=["knnIMpy"],
-    packages=find_packages(exclude="test"),
-    keywords="Mutual-Information Neural-Networks Transfer-Entropy",
+    packages=find_packages(exclude=["tests", ".github"]),
+    keywords="Mutual-Information Neural-Networks",
     python_requires=">=3.6",
     install_requires=[
         "torch",

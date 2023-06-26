@@ -27,95 +27,10 @@ from torch import nn
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 from torch.utils.data import DataLoader, TensorDataset, random_split
 
-from minepy.mineLayers import get_activation_fn
-from minepy.mineTools import toColVector
+from minepy.mineTools import MineModel, ema, toColVector
 
 logging.basicConfig()
 logger = logging.getLogger(__name__)
-
-EPS = 1e-6
-
-
-class EMALoss(torch.autograd.Function):
-
-    @staticmethod
-    def forward(ctx, input, running_ema):
-        ctx.save_for_backward(input, running_ema)
-        input_log_sum_exp = input.exp().mean().log()
-
-        return input_log_sum_exp
-
-    @staticmethod
-    def backward(ctx, grad_output):
-        input, running_mean = ctx.saved_tensors
-        grad = grad_output * input.exp().detach() / \
-            (running_mean + EPS) / input.shape[0]
-        return grad, None
-
-
-def ema(mu, alpha, past_ema):
-    return alpha * mu + (1.0 - alpha) * past_ema
-
-
-def ema_loss(x, running_mean, alpha):
-    t_exp = torch.exp(torch.logsumexp(x, 0) - math.log(x.shape[0])).detach()
-    if running_mean == 0:
-        running_mean = t_exp
-    else:
-        running_mean = ema(t_exp, alpha, running_mean.item())
-    t_log = EMALoss.apply(x, running_mean)
-
-    # Recalculate ema
-    return t_log, running_mean
-
-
-class MineNet(nn.Module):
-
-    def __init__(self, input_dim, hidden_dim, afn, nLayers, loss, alpha,
-                 regWeight, targetVal):
-        super().__init__()
-        activation_fn = get_activation_fn(afn)
-        seq = [nn.Linear(input_dim, hidden_dim), activation_fn()]
-        for _ in range(nLayers):
-            seq += [nn.Linear(hidden_dim, hidden_dim), activation_fn()]
-        seq += [nn.Linear(hidden_dim, 1)]
-        self.net = nn.Sequential(*seq)
-        self.running_mean = 0
-        self.loss = loss
-        self.alpha = alpha
-        self.regWeight = regWeight
-        self.targetVal = targetVal
-
-    def forward(self, x, z):
-        z_marg = z[torch.randperm(z.shape[0])]
-
-        t = self.net(torch.cat((x, z), dim=1)).mean()
-        t_marg = self.net(torch.cat((x, z_marg), dim=1))
-        if self.loss in ['mine']:
-            second_term, self.running_mean = ema_loss(t_marg,
-                                                      self.running_mean,
-                                                      self.alpha)
-
-            mi = t - second_term
-            loss = -mi
-        elif self.loss in ['fdiv']:
-            second_term = torch.exp(t_marg - 1).mean()
-            mi = t - second_term
-            loss = -mi
-        elif self.loss in ["remine"]:
-            second_term = torch.logsumexp(t_marg, 0) - math.log(
-                t_marg.shape[0])  # mine_biased as default
-
-            mi = t - second_term
-            loss = -mi + self.regWeight * torch.pow(
-                second_term - self.targetVal, 2)
-        else:
-            second_term = torch.logsumexp(t_marg, 0) - math.log(
-                t_marg.shape[0])  # mine_biased as default
-            mi = t - second_term
-            loss = -mi
-
-        return loss, mi
 
 
 class Mine(LightningModule):
@@ -123,32 +38,38 @@ class Mine(LightningModule):
     def __init__(
         self,
         input_dim,
-        hidden_dim=150,
+        hidden_dim=50,
+        num_hidden_layers=2,
         afn="elu",
-        nLayers=3,
         loss='mine_biased',
-        alpha=0.01,
+        alpha=0.1,
         regWeight=1,
         targetVal=0.0,
     ):
         super().__init__()
         self.save_hyperparameters()
-        self.net = MineNet(input_dim, hidden_dim, afn, nLayers, loss, alpha,
-                           regWeight, targetVal)
-        self.ema_val_loss = None
+        self.model = MineModel(input_dim, hidden_dim, afn, num_hidden_layers,
+                               loss, alpha, regWeight, targetVal)
         self.calc_curves = False
+
+        self.val_ema_loss = None
+        self.train_loss_epoch = []
+        self.train_mi_epoch = []
         self.val_loss_epoch = []
+        self.val_ema_loss_epoch = []
         self.val_mi_epoch = []
+        self.test_loss_epoch = []
         self.test_mi_epoch = []
-        self.ema_val_loss_epoch = []
 
     def loss(self, x, z):
-        loss, mi = self.net.forward(x, z)
+        loss, mi = self.model.forward(x, z)
         return loss, mi
 
     def training_step(self, batch, batch_idx):
         x, z = batch
-        loss, _ = self.loss(x, z)
+        loss, mi = self.loss(x, z)
+        self.train_loss_epoch.append(loss.detach().item())
+        self.train_mi_epoch.append(mi.detach().item())
         self.log('train_loss', loss)
         return loss
 
@@ -157,41 +78,48 @@ class Mine(LightningModule):
         val_loss, val_mi = self.loss(x, z)
         val_loss = val_loss.detach()
         val_mi = val_mi.detach()
-        # calculate ema_val_loss
-        if self.ema_val_loss is None:
-            self.ema_val_loss = val_loss
+        # calculate validation ema loss
+        if self.val_ema_loss is None:
+            self.val_ema_loss = val_loss
         else:
-            self.ema_val_loss = ema(val_loss, 0.01, self.ema_val_loss)
+            self.val_ema_loss = ema(val_loss, 0.01, self.val_ema_loss)
 
         self.val_mi_epoch.append(val_mi.item())
-        self.ema_val_loss_epoch.append(self.ema_val_loss.item())
+        self.val_ema_loss_epoch.append(self.val_ema_loss.item())
         # test loss
         _, test_mi = self.loss(self.x, self.z)
         self.test_mi_epoch.append(test_mi.item())
-        self.log('val_loss', self.ema_val_loss)
-        return self.ema_val_loss
+        self.log('val_loss', self.val_ema_loss)
+        return self.val_ema_loss
         # return {'val_loss': self.ema_val_loss, 'test_loss': test_loss}
         # return {'val_loss': self.ema_val_loss, 'test_loss': test_loss}
 
-    def get_mi(self):
-        self.calc_loss_curves()
-        ind_max_stop = np.argmax(self.ema_val_mi_epoch)
+    def get_mi(self, all=False):
+        self.train_loss_epoch = np.array(self.train_loss_epoch)
+        self.train_mi_epoch = np.array(self.train_mi_epoch)
+        self.val_loss_epoch = np.array(self.val_loss_epoch)
+        self.val_mi_epoch = np.array(self.val_mi_epoch)
+        self.test_mi_epoch = np.array(self.test_mi_epoch)
+        self.val_ema_loss_epoch = np.array(self.val_ema_loss_epoch)
+        self.val_ema_mi_epoch = -self.val_ema_loss_epoch
+
+        ind_max_stop = np.argmax(self.val_ema_mi_epoch)
+        ind_min_stop = np.argmin(self.val_ema_loss_epoch)
         ind_max_val = np.argmax(self.val_mi_epoch)
         mi_val = self.val_mi_epoch[ind_max_val]
         mi_test = self.test_mi_epoch[ind_max_val]
         mi_stop = self.test_mi_epoch[ind_max_stop]
         fepoch = self.val_mi_epoch.size
-        return (mi_val, mi_test, mi_stop, ind_max_val, ind_max_stop, fepoch)
+        if all:
+            return (mi_val, mi_test, mi_stop, ind_max_val, ind_min_stop,
+                    fepoch)
+        else:
+            return mi_test
 
     def calc_loss_curves(self):
-        if self.calc_curves:
-            pass
-        else:
-            self.val_mi_epoch = np.array(self.val_mi_epoch)
-            self.test_mi_epoch = np.array(self.test_mi_epoch)
-            self.ema_val_mi_epoch = -np.array(self.ema_val_loss_epoch)
-            self.calc_curves = True
-        return self.val_mi_epoch, self.test_mi_epoch, self.ema_val_mi_epoch
+        _ = self.get_mi()
+        return (self.train_loss_epoch, self.val_loss_epoch, self.test_mi_epoch,
+                self.val_ema_loss_epoch)
 
     def configure_optimizers(self):
         optimizer = torch.optim.Adam(self.parameters(),
@@ -215,11 +143,11 @@ class Mine(LightningModule):
             max_epochs=1000,
             val_size=0.2,
             lr=1e-3,
-            lr_patience=100,
-            lr_factor=0.25,
+            lr_factor=0.1,
+            lr_patience=10,
             weight_decay=5e-5,
-            early_st_patience=10,
-            early_st_min_delta=0,
+            stop_patience=100,
+            stop_min_delta=0.05,
             callbacks=None,
             device=None,
             trainer_devices='auto',
@@ -241,7 +169,6 @@ class Mine(LightningModule):
 
         X = torch.from_numpy(toColVector(X.astype(np.float32)))
         Z = torch.from_numpy(toColVector(Z.astype(np.float32)))
-        # Z = torch.tensor(toColVector(Z))
         self.x = X.to(device)
         self.z = Z.to(device)
 
@@ -260,8 +187,8 @@ class Mine(LightningModule):
             val_dataloader = DataLoader(valid, batch_size=valid_size)
             early_stopping = EarlyStopping(mode='min',
                                            monitor='val_loss',
-                                           min_delta=early_st_min_delta,
-                                           patience=early_st_patience,
+                                           min_delta=stop_min_delta,
+                                           patience=stop_patience,
                                            verbose=self.verbose)
             callbacks.append(early_stopping)
             trainer = Trainer(accelerator=accelerator,

@@ -7,71 +7,24 @@ import matplotlib.pyplot as plt
 import numpy as np
 import torch
 import torch.nn as nn
+from torch.optim.lr_scheduler import ReduceLROnPlateau
 from tqdm import tqdm
 
-import minepy.mineTools as mineTools
-from minepy.mineLayers import MineNet
-
-EPS = 1e-6
-
-
-class Clamp(torch.autograd.Function):
-
-    @staticmethod
-    def forward(ctx, input, min, max):
-        return input.clamp(min=min, max=max)
-
-    @staticmethod
-    def backward(ctx, grad_output):
-        return grad_output.clone(), None, None
-
-
-class EMALoss(torch.autograd.Function):
-
-    @staticmethod
-    def forward(ctx, input, running_ema):
-        ctx.save_for_backward(input, running_ema)
-        input_log_sum_exp = input.exp().mean().log()
-
-        return input_log_sum_exp
-
-    @staticmethod
-    def backward(ctx, grad_output):
-        input, running_mean = ctx.saved_tensors
-        grad = grad_output * input.exp().detach() / \
-            (running_mean + EPS) / input.shape[0]
-        return grad, None
-
-
-def ema(mu, alpha, past_ema):
-    return alpha * mu + (1.0 - alpha) * past_ema
-
-
-def ema_loss(x, running_mean, alpha):
-    t_exp = torch.exp(torch.logsumexp(x, 0) - math.log(x.shape[0])).detach()
-    if running_mean == 0:
-        running_mean = t_exp
-    else:
-        running_mean = ema(t_exp, alpha, running_mean.item())
-    t_log = EMALoss.apply(x, running_mean)
-
-    # Recalculate ema
-    return t_log, running_mean
+from minepy.mineTools import (EarlyStopping, MineModel, ema, mine_batch,
+                              toColVector)
 
 
 class Mine(nn.Module):
 
     def __init__(self,
-                 Net=None,
-                 input_dim=2,
-                 loss='mine_biased',
-                 afn='relu',
+                 input_dim,
                  hidden_dim=50,
-                 nLayers=2,
+                 num_hidden_layers=2,
+                 afn='elu',
+                 loss='mine_biased',
                  alpha=0.1,
                  regWeight=1.0,
                  targetVal=0.0,
-                 clip=1.0,
                  device=None):
         super().__init__()
         if device is None:
@@ -79,198 +32,133 @@ class Mine(nn.Module):
         else:
             self.device = device
         torch.device(self.device)
-        self.running_mean = 0
-        self.loss = loss
-        self.alpha = alpha
-        self.regWeight = regWeight
-        self.targetVal = targetVal
-        self.clip = clip
 
-        if Net is None:
-            Net = MineNet(
-                input_dim,
-                hidden_dim=hidden_dim,
-                afn=afn,
-                nLayers=nLayers,
-            )
-        self.Net = Net.to(self.device)
+        self.model = MineModel(input_dim, hidden_dim, afn, num_hidden_layers,
+                               loss, alpha, regWeight, targetVal)
+        self.model = self.model.to(self.device)
+        self.calc_curves = False
 
-    def forward(self, x, z, z_marg=None):
-        if z_marg is None:
-            z_marg = z[torch.randperm(z.shape[0])]
+    def forward(self, x, z):
+        loss, mi = self.model(x, z)
+        return loss, mi
 
-        t = self.Net(x, z).mean()
-        t_marg = self.Net(x, z_marg)
+    def fit(
+        self,
+        X,
+        Z,
+        batch_size=64,
+        max_epochs=2000,
+        val_size=0.2,
+        lr=1e-3,
+        lr_factor=0.1,
+        lr_patience=10,
+        stop_patience=100,
+        stop_min_delta=0.05,
+        verbose=False,
+    ):
 
-        if self.loss in ['mine']:
-            second_term, self.running_mean = ema_loss(t_marg,
-                                                      self.running_mean,
-                                                      self.alpha)
-        elif self.loss in ['fdiv']:
-            second_term = torch.exp(t_marg - 1).mean()
-        elif self.loss in ["remine"]:
-            second_term, self.running_mean = ema_loss(t_marg,
-                                                      self.running_mean,
-                                                      self.alpha)
-            # second_term = torch.logsumexp(t_marg, 0) - math.log(
-            #     t_marg.shape[0])
-            second_term += self.regWeight * torch.pow(
-                second_term - self.targetVal, 2)
-        elif self.loss in ['clip']:
-            # with torch.no_grad():
-            # t_marg = Clamp.apply(t_marg, -self.clip, self.clip)
-            t_marg = torch.clamp(t_marg, min=-self.clip, max=self.clip)
-            # print(f'{zc.to("cpu").detach().numpy()}')
-            second_term = torch.logsumexp(t_marg, 0) - math.log(
-                t_marg.shape[0])
-        else:
-            second_term = torch.logsumexp(t_marg, 0) - math.log(
-                t_marg.shape[0])  # mine_biased default
+        opt = torch.optim.Adam(self.model.parameters(),
+                               lr=lr,
+                               betas=(0.9, 0.999))
+        scheduler = ReduceLROnPlateau(opt,
+                                      mode='min',
+                                      factor=lr_factor,
+                                      patience=lr_patience,
+                                      verbose=verbose)
 
-        return -t + second_term
+        early_stopping = EarlyStopping(patience=stop_patience,
+                                       delta=stop_min_delta)
 
-    def optimize(self,
-                 X,
-                 Z,
-                 batchSize,
-                 numEpochs,
-                 opt=None,
-                 lr=5e-4,
-                 disableTqdm=True):
+        X = torch.from_numpy(toColVector(X.astype(np.float32)))
+        Z = torch.from_numpy(toColVector(Z.astype(np.float32)))
 
-        if opt is None:
-            opt = torch.optim.Adam(self.Net.parameters(),
-                                   lr=lr,
-                                   betas=(0.9, 0.999))
+        N, _ = X.shape
 
-        self.epochMI = []
-        self.train()  # Set model to training mode
-        for _ in tqdm(range(numEpochs), disable=disableTqdm):
-            mu_mi = 0
-            for x, z in mineTools.MIbatch(X, Z, batchSize):
+        val_size = int(val_size * N)
+        inds = np.random.permutation(N)
+        val_idx, train_idx, = inds[:val_size], inds[val_size:]
+        Xval, Xtrain = X[val_idx, :], X[train_idx, :]
+        Zval, Ztrain = Z[val_idx, :], Z[train_idx, :]
+
+        Xval = Xval.to(self.device)
+        Xtrain = Xtrain.to(self.device)
+        Zval = Zval.to(self.device)
+        Ztrain = Ztrain.to(self.device)
+        X = X.to(self.device)
+        Z = Z.to(self.device)
+
+        train_loss_epoch = []
+        train_mi_epoch = []
+        val_loss_epoch = []
+        val_ema_loss_epoch = []
+        val_mi_epoch = []
+        test_loss_epoch = []
+        test_mi_epoch = []
+
+        for i in tqdm(range(max_epochs), disable=not verbose):
+            # training
+            self.train()
+            for x, z in mine_batch(Xtrain, Ztrain, batch_size=batch_size):
                 x = x.to(self.device)
                 z = z.to(self.device)
                 opt.zero_grad()
                 with torch.set_grad_enabled(True):
-                    loss = self.forward(x, z)
-                    loss.backward()
+                    train_loss, train_mi = self.forward(x, z)
+                    train_loss.backward()
                     opt.step()
-                    mu_mi = -loss.item()
-            self.epochMI.append(mu_mi)
+            train_loss, train_mi = self.forward(Xtrain, Ztrain)
+            train_loss_epoch.append(train_loss.item())
+            train_mi_epoch.append(train_mi.item())
 
-        MI = self.evalMI(X, Z)
-        return MI, np.array(self.epochMI)
-
-    def evalMI(self, x, z, z_marg=None):
-        if isinstance(x, np.ndarray):
-            x = mineTools.toColVector(x)
-            x = torch.from_numpy(x.copy()).float()
-        if isinstance(z, np.ndarray):
-            z = mineTools.toColVector(z)
-            z = torch.from_numpy(z.copy()).float()
-        # self.clip = None
-        x = x.to(self.device)
-        z = z.to(self.device)
-        with torch.no_grad():
-            mi = -self.forward(x, z, z_marg)
-        return mi.item()
-
-    def netReset(self):
-        for layer in self.Net.children():
-            if hasattr(layer, 'reset_parameters'):
-                layer.reset_parameters()
-
-    def optimize_validate(self,
-                          X,
-                          Z,
-                          batchSize,
-                          numEpochs,
-                          val_size=0.2,
-                          opt=None,
-                          lr=1e-3,
-                          patience=100,
-                          min_delta=0.05,
-                          verbose=False,
-                          disableTqdm=True):
-        if opt is None:
-            opt = torch.optim.Adam(self.Net.parameters(),
-                                   lr=lr,
-                                   betas=(0.9, 0.999))
-
-        # split_index = np.rint(X.size * val_size).astype(int)
-        X = mineTools.toColVector(X)
-        Z = mineTools.toColVector(Z)
-        val_size = int(val_size * X.size)
-        train_size = int(X.size - val_size)
-        split_index = np.random.randint(0, train_size)
-        # split_index = 2500
-        val_inds = np.zeros(X.shape[0], dtype=bool)
-        val_inds[split_index:split_index + val_size] = True
-        train_inds = np.logical_not(val_inds)
-
-        if verbose:
-            Xval_out = X[val_inds, :]
-            Zval_out = Z[val_inds, :]
-
-        X = torch.from_numpy(X.copy()).float().to(self.device)
-        Z = torch.from_numpy(Z.copy()).float().to(self.device)
-        Xval = X[val_inds, :]
-        Zval = Z[val_inds, :]
-
-        Xtrain = X[train_inds, :]
-        Ztrain = Z[train_inds, :]
-
-        early_stopping = mineTools.EarlyStopping(patience=patience,
-                                                 min_delta=min_delta)
-
-        epoch_mi_val = []
-        epoch_mi_val_earlyst = []
-        epoch_mi_test = []
-
-        running_mean_earlyst = None
-
-        self.train()  # Set model to training mode
-        for i in tqdm(range(numEpochs), disable=disableTqdm):
-            for x, z in mineTools.MIbatch(Xtrain, Ztrain, batchSize):
-                opt.zero_grad()
-                with torch.set_grad_enabled(True):
-                    loss = self.forward(x, z)
-                    loss.backward()
-                    opt.step()
-
-            # Evaluate over train and validation sets, running means
+            # validate and testing
+            torch.set_grad_enabled(False)
+            self.eval()
             with torch.no_grad():
-                val_mi = self.forward(Xval, Zval).item()
-                test_mi = self.forward(X, Z).item()
-                if running_mean_earlyst is None:
-                    running_mean_earlyst = val_mi
+                # validate
+                val_loss, val_mi = self.forward(Xval, Zval)
+                if i == 0:
+                    val_ema_loss = val_loss
                 else:
-                    running_mean_earlyst = ema(val_mi, 0.01,
-                                               running_mean_earlyst)
+                    val_ema_loss = ema(val_loss, 0.01, val_ema_loss)
+                val_ema_loss_epoch.append(val_ema_loss.item())
+                val_loss_epoch.append(val_loss.item())
+                val_mi_epoch.append(val_mi.item())
 
-                epoch_mi_val_earlyst.append(running_mean_earlyst)
-                epoch_mi_val.append(val_mi)
-                epoch_mi_test.append(test_mi)
+                # testing
+                test_loss, test_mi = self.forward(X, Z)
+                test_loss_epoch.append(test_loss.item())
+                test_mi_epoch.append(test_mi.item())
 
-            # early stopping
-            early_stopping(running_mean_earlyst)
+                # learning rate scheduler
+                scheduler.step(val_ema_loss)
+                # early stopping
+                early_stopping(val_ema_loss)
+
             if early_stopping.early_stop:
                 break
 
-        epoch_mi_val = -np.array(epoch_mi_val)
-        epoch_mi_test = -np.array(epoch_mi_test)
-        epoch_mi_val_earlyst = -np.array(epoch_mi_val_earlyst)
+        self.train_loss_epoch = np.array(train_loss_epoch)
+        self.train_mi_epoch = np.array(train_mi_epoch)
+        self.val_loss_epoch = np.array(val_loss_epoch)
+        self.val_mi_epoch = np.array(val_mi_epoch)
+        self.test_mi_epoch = np.array(test_mi_epoch)
+        self.val_ema_loss_epoch = np.array(val_ema_loss_epoch)
+        self.val_ema_mi_epoch = -self.val_ema_loss_epoch
 
-        final_epoch = i + 1
-        ind_max_val = np.argmax(epoch_mi_val)
-        ind_max_stop = np.argmax(epoch_mi_val_earlyst)
-        MI_VAL = epoch_mi_val[ind_max_val]
-        MI_TEST = epoch_mi_test[ind_max_val]
-        MI_ST = epoch_mi_test[ind_max_stop]
-
-        if verbose:
-            return (MI_VAL, MI_TEST, MI_ST, epoch_mi_val, epoch_mi_val_earlyst,
-                    epoch_mi_test, final_epoch, ind_max_val, ind_max_stop,
-                    Xval_out, Zval_out)
+    def get_mi(self, all=False):
+        ind_max_stop = np.argmax(self.val_ema_mi_epoch)
+        ind_min_stop = np.argmin(self.val_ema_loss_epoch)
+        ind_max_val = np.argmax(self.val_mi_epoch)
+        mi_val = self.val_mi_epoch[ind_max_val]
+        mi_test = self.test_mi_epoch[ind_max_val]
+        mi_stop = self.test_mi_epoch[ind_max_stop]
+        fepoch = self.val_mi_epoch.size
+        if all:
+            return (mi_val, mi_test, mi_stop, ind_max_val, ind_min_stop,
+                    fepoch)
         else:
-            return MI_VAL, MI_TEST, MI_ST, ind_max_val, ind_max_stop, final_epoch
+            return mi_test
+
+    def get_curves(self):
+        return (self.train_loss_epoch, self.val_loss_epoch, self.test_mi_epoch,
+                self.val_ema_loss_epoch)

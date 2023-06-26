@@ -5,9 +5,13 @@ Minepy Tools
 
 """
 
+import math
+
 import numpy as np
 import torch
-from scipy.interpolate import interp1d
+import torch.nn as nn
+
+EPS = 1e-6
 
 
 def toColVector(x):
@@ -34,7 +38,34 @@ def embedding(x, m, tau):
     return V
 
 
-def MIbatch(x, z, batch_size=1, shuffle=True):
+def get_activation_fn(afn):
+    activation_functions = {
+        "linear": lambda: lambda x: x,
+        "relu": nn.ReLU,
+        "relu6": nn.ReLU6,
+        "elu": nn.ELU,
+        "prelu": nn.PReLU,
+        "leaky_relu": nn.LeakyReLU,
+        "threshold": nn.Threshold,
+        "hardtanh": nn.Hardtanh,
+        "sigmoid": nn.Sigmoid,
+        "tanh": nn.Tanh,
+        "log_sigmoid": nn.LogSigmoid,
+        "softplus": nn.Softplus,
+        "softshrink": nn.Softshrink,
+        "softsign": nn.Softsign,
+        "tanhshrink": nn.Tanhshrink,
+    }
+
+    if afn not in activation_functions:
+        raise ValueError(
+            f"'{afn}' is not included in activation_functions. Use below one \n {activation_functions.keys()}"
+        )
+
+    return activation_functions[afn]
+
+
+def mine_batch(x, z, batch_size=1, shuffle=True):
 
     if isinstance(x, np.ndarray):
         x = toColVector(x)
@@ -62,26 +93,6 @@ def MIbatch(x, z, batch_size=1, shuffle=True):
 
 class EarlyStopping:
 
-    def __init__(self, patience=5, min_delta=0):
-        self.patience = patience
-        self.min_delta = min_delta
-        self.counter = 0
-        self.early_stop = False
-        self.min_validation_loss = np.inf
-
-    def __call__(self, validation_loss):
-
-        if validation_loss < self.min_validation_loss:
-            self.min_validation_loss = validation_loss
-            self.counter = 0
-        elif validation_loss > (self.min_validation_loss + self.min_delta):
-            self.counter += 1
-            if self.counter >= self.patience:
-                self.early_stop = True
-
-
-class EarlyStopping02:
-
     def __init__(self, patience=5, delta=0):
         self.patience = patience
         self.delta = np.abs(delta)
@@ -102,81 +113,83 @@ class EarlyStopping02:
             self.early_stop = True
 
 
-def TEbatch(source,
-            target,
-            m=1,
-            tau=1,
-            u=1,
-            batchSize=1,
-            shuffle=True,
-            fullBatch=False):
+class EMALoss(torch.autograd.Function):
 
-    # embedding
-    target = embedding(target, m, tau)
-    source = embedding(source, m, tau)
-    tu = target[u:, :]
-    tm = target[:-u, :]
-    sm = source[:-u, :]
-    tu = torch.from_numpy(tu).float()
-    tm = torch.from_numpy(tm).float()
-    sm = torch.from_numpy(sm).float()
+    @staticmethod
+    def forward(ctx, input, running_ema):
+        ctx.save_for_backward(input, running_ema)
+        input_log_sum_exp = input.exp().mean().log()
 
-    n = tu.shape[0]
+        return input_log_sum_exp
 
-    if shuffle:
-        rand_perm = torch.randperm(n)
-        tu = tu[rand_perm, :]
-        tm = tm[rand_perm, :]
-        sm = sm[rand_perm, :]
+    @staticmethod
+    def backward(ctx, grad_output):
+        input, running_mean = ctx.saved_tensors
+        grad = grad_output * input.exp().detach() / \
+            (running_mean + EPS) / input.shape[0]
+        return grad, None
 
-    if fullBatch:
-        return (tu, tm, sm)
+
+def ema(mu, alpha, past_ema):
+    return alpha * mu + (1.0 - alpha) * past_ema
+
+
+def ema_loss(x, running_mean, alpha):
+    t_exp = torch.exp(torch.logsumexp(x, 0) - math.log(x.shape[0])).detach()
+    if running_mean == 0:
+        running_mean = t_exp
     else:
-        batches = []
-        for i in range(n // batchSize):
-            tu_b = tu[i * batchSize:(i + 1) * batchSize, :]
-            tm_b = tm[i * batchSize:(i + 1) * batchSize, :]
-            sm_b = sm[i * batchSize:(i + 1) * batchSize, :]
+        running_mean = ema(t_exp, alpha, running_mean.item())
+    t_log = EMALoss.apply(x, running_mean)
 
-            batches.append((tu_b, tm_b, sm_b))
-        return batches
+    # Recalculate ema
+    return t_log, running_mean
 
 
-def TEbatch02(data, batchSize=1, shuffle=True, fullBatch=False):
+class MineModel(nn.Module):
 
-    n = data.shape[0]
+    def __init__(self, input_dim, hidden_dim, afn, num_hidden_layers, loss,
+                 alpha, regWeight, targetVal):
+        super().__init__()
+        activation_fn = get_activation_fn(afn)
+        seq = [nn.Linear(input_dim, hidden_dim), activation_fn()]
+        for _ in range(num_hidden_layers):
+            seq += [nn.Linear(hidden_dim, hidden_dim), activation_fn()]
+        seq += [nn.Linear(hidden_dim, 1)]
+        self.model = nn.Sequential(*seq)
+        self.running_mean = 0
+        self.loss = loss
+        self.alpha = alpha
+        self.regWeight = regWeight
+        self.targetVal = targetVal
 
-    if shuffle:
-        rand_perm = torch.randperm(n)
-        data = data[rand_perm, :]
+    def forward(self, x, z):
+        z_marg = z[torch.randperm(z.shape[0])]
 
-    if fullBatch:
-        return (data)
-    else:
-        batches = []
-        for i in range(n // batchSize):
-            batches.append(data[i * batchSize:(i + 1) * batchSize, :])
-        return batches
+        t = self.model(torch.cat((x, z), dim=1)).mean()
+        t_marg = self.model(torch.cat((x, z_marg), dim=1))
+        if self.loss in ['mine']:
+            second_term, self.running_mean = ema_loss(t_marg,
+                                                      self.running_mean,
+                                                      self.alpha)
 
+            mi = t - second_term
+            loss = -mi
+        elif self.loss in ['fdiv']:
+            second_term = torch.exp(t_marg - 1).mean()
+            mi = t - second_term
+            loss = -mi
+        elif self.loss in ["remine"]:
+            second_term = torch.logsumexp(t_marg, 0) - math.log(
+                t_marg.shape[0])
 
-def Interp(x, ntimes):
-    n = x.size
-    t = np.linspace(0, n, n)
-    f = interp1d(t, x, kind=2, copy=True, fill_value=(x[0], x[-1]))
-    tnew = np.linspace(0, n, ntimes * n)
-    return f(tnew)
+            mi = t - second_term
+            loss = -mi + self.regWeight * torch.pow(
+                second_term - self.targetVal, 2)
+        else:
+            second_term = torch.logsumexp(t_marg, 0) - math.log(
+                t_marg.shape[0])  # mine_biased as default
+            mi = t - second_term
+            loss = -mi
 
-
-def henon(n, c):
-    """Coupled Henon map X1->X2"""
-    n0 = 8000
-    n = n + n0
-    x = np.zeros((n, 2))
-    x[0:2, :] = np.random.rand(2, 2) * 0.1
-    for i in range(1, n):
-        x[i, 0] = 1.4 - x[i - 1, 0]**2 + 0.3 * x[i - 2, 0]
-
-        x[i, 1] = (1.4 - c * x[i - 1, 0] * x[i - 1, 1] -
-                   (1 - c) * x[i - 1, 1]**2 + 0.3 * x[i - 2, 1])
-
-    return x[n0:, :]
+        return loss, mi
