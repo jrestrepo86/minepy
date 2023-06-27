@@ -10,8 +10,8 @@ import torch.nn as nn
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 from tqdm import tqdm
 
-from minepy.mineTools import (EarlyStopping, MineModel, ema, mine_batch,
-                              toColVector)
+from minepy.mine.mine_tools import MineModel, ema, mine_batch
+from minepy.minepy_tools import EarlyStopping, toColVector
 
 
 class Mine(nn.Module):

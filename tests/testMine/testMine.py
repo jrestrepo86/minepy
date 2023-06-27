@@ -5,7 +5,7 @@ import numpy as np
 from matplotlib import pyplot as plt
 from tqdm import tqdm
 
-from minepy.minepy import Mine
+from minepy.mine.mine import Mine
 
 
 def plot(ax, Rho, teo_mi, mi, label):

@@ -2,7 +2,6 @@
 # -*- coding: utf-8 -*-
 
 import logging
-import math
 import warnings
 
 import matplotlib.pyplot as plt
@@ -23,11 +22,11 @@ except ImportError:
     logging.getLogger("pytorch_lightning").setLevel(logging.WARNING)
     st = None
 
-from torch import nn
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 from torch.utils.data import DataLoader, TensorDataset, random_split
 
-from minepy.mineTools import MineModel, ema, toColVector
+from minepy.mine.mine_tools import MineModel, ema
+from minepy.minepy_tools import toColVector
 
 logging.basicConfig()
 logger = logging.getLogger(__name__)

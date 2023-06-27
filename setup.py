@@ -12,7 +12,7 @@ setup(
     description="Mutual information neural estimation",
     long_description=long_description,
     long_description_content_type="text/markdown",
-    url="https://github.com/jrestrepo86/mine.git",
+    url="https://github.com/jrestrepo86/minepy.git",
     author="Juan F. Restrepo",
     author_email="juan.restrepo@uner.edu.ar",
     license="MIT",
