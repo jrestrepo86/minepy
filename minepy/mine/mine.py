@@ -1,9 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-import math
 
-import matplotlib.pyplot as plt
 import numpy as np
 import torch
 import torch.nn as nn
@@ -15,26 +13,35 @@ from minepy.minepy_tools import EarlyStopping, toColVector
 
 
 class Mine(nn.Module):
-
-    def __init__(self,
-                 input_dim,
-                 hidden_dim=50,
-                 num_hidden_layers=2,
-                 afn='elu',
-                 loss='mine_biased',
-                 alpha=0.1,
-                 regWeight=1.0,
-                 targetVal=0.0,
-                 device=None):
+    def __init__(
+        self,
+        input_dim,
+        hidden_dim=50,
+        num_hidden_layers=2,
+        afn="elu",
+        loss="mine_biased",
+        alpha=0.1,
+        regWeight=1.0,
+        targetVal=0.0,
+        device=None,
+    ):
         super().__init__()
         if device is None:
-            self.device = 'cuda' if torch.cuda.is_available() else 'cpu'
+            self.device = "cuda" if torch.cuda.is_available() else "cpu"
         else:
             self.device = device
         torch.device(self.device)
 
-        self.model = MineModel(input_dim, hidden_dim, afn, num_hidden_layers,
-                               loss, alpha, regWeight, targetVal)
+        self.model = MineModel(
+            input_dim,
+            hidden_dim,
+            afn,
+            num_hidden_layers,
+            loss,
+            alpha,
+            regWeight,
+            targetVal,
+        )
         self.model = self.model.to(self.device)
         self.calc_curves = False
 
@@ -56,18 +63,12 @@ class Mine(nn.Module):
         stop_min_delta=0.05,
         verbose=False,
     ):
+        opt = torch.optim.Adam(self.model.parameters(), lr=lr, betas=(0.9, 0.999))
+        scheduler = ReduceLROnPlateau(
+            opt, mode="max", factor=lr_factor, patience=lr_patience, verbose=verbose
+        )
 
-        opt = torch.optim.Adam(self.model.parameters(),
-                               lr=lr,
-                               betas=(0.9, 0.999))
-        scheduler = ReduceLROnPlateau(opt,
-                                      mode='min',
-                                      factor=lr_factor,
-                                      patience=lr_patience,
-                                      verbose=verbose)
-
-        early_stopping = EarlyStopping(patience=stop_patience,
-                                       delta=stop_min_delta)
+        early_stopping = EarlyStopping(patience=stop_patience, delta=stop_min_delta)
 
         X = torch.from_numpy(toColVector(X.astype(np.float32)))
         Z = torch.from_numpy(toColVector(Z.astype(np.float32)))
@@ -76,7 +77,13 @@ class Mine(nn.Module):
 
         val_size = int(val_size * N)
         inds = np.random.permutation(N)
-        val_idx, train_idx, = inds[:val_size], inds[val_size:]
+        (
+            val_idx,
+            train_idx,
+        ) = (
+            inds[:val_size],
+            inds[val_size:],
+        )
         Xval, Xtrain = X[val_idx, :], X[train_idx, :]
         Zval, Ztrain = Z[val_idx, :], Z[train_idx, :]
 
@@ -154,11 +161,14 @@ class Mine(nn.Module):
         mi_stop = self.test_mi_epoch[ind_max_stop]
         fepoch = self.val_mi_epoch.size
         if all:
-            return (mi_val, mi_test, mi_stop, ind_max_val, ind_min_stop,
-                    fepoch)
+            return (mi_val, mi_test, mi_stop, ind_max_val, ind_min_stop, fepoch)
         else:
             return mi_test
 
     def get_curves(self):
-        return (self.train_loss_epoch, self.val_loss_epoch, self.test_mi_epoch,
-                self.val_ema_loss_epoch)
+        return (
+            self.train_loss_epoch,
+            self.val_loss_epoch,
+            self.test_mi_epoch,
+            self.val_ema_loss_epoch,
+        )
