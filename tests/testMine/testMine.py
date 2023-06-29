@@ -9,20 +9,19 @@ from minepy.mine.mine import Mine
 
 
 def plot(ax, Rho, teo_mi, mi, label):
-    ax.plot(Rho, teo_mi, '.k', label='True')
-    ax.plot(Rho, mi, 'b', label=label)
-    ax.legend(loc='upper center')
+    ax.plot(Rho, teo_mi, ".k", label="True")
+    ax.plot(Rho, mi, "b", label=label)
+    ax.legend(loc="upper center")
     ax.set_title(label)
 
 
 def testMine():
-
     # Net
-    loss1 = 'mine_biased'
-    loss2 = 'mine'
-    loss3 = 'remine'
+    loss1 = "mine_biased"
+    loss2 = "mine"
+    loss3 = "remine"
     input_dim = 2
-    model_params = {'hidden_dim': 50, 'afn': 'elu', 'num_hidden_layers': 3}
+    model_params = {"hidden_dim": 50, "afn": "elu", "num_hidden_layers": 3}
 
     mu = np.array([0, 0])
     Rho = np.linspace(-0.99, 0.99, 21)
@@ -33,14 +32,25 @@ def testMine():
 
     # Training
     batch_size = 300
-    max_epochs = 5000
-    for i, rho in enumerate(tqdm(Rho)):
+    max_epochs = 3000
+    train_params = {
+        "batch_size": batch_size,
+        "max_epochs": max_epochs,
+        "val_size": 0.2,
+        "lr": 1e-3,
+        "lr_factor": 0.1,
+        "lr_patience": 10,
+        "stop_patience": 100,
+        "stop_min_delta": 0.01,
+        "verbose": False,
+    }
 
+    for i, rho in enumerate(tqdm(Rho)):
         # Generate data
         cov_matrix = np.array([[1, rho], [rho, 1]])
-        joint_samples_train = np.random.multivariate_normal(mean=mu,
-                                                            cov=cov_matrix,
-                                                            size=(10000, 1))
+        joint_samples_train = np.random.multivariate_normal(
+            mean=mu, cov=cov_matrix, size=(10000, 1)
+        )
         X = np.squeeze(joint_samples_train[:, :, 0])
         Z = np.squeeze(joint_samples_train[:, :, 1])
 
@@ -49,16 +59,14 @@ def testMine():
         # models
         model_biased = Mine(input_dim, loss=loss1, **model_params)
         model_mine = Mine(input_dim, loss=loss2, alpha=0.01, **model_params)
-        model_remine = Mine(input_dim,
-                            loss=loss3,
-                            regWeight=0.1,
-                            targetVal=0,
-                            **model_params)
+        model_remine = Mine(
+            input_dim, loss=loss3, regWeight=0.1, targetVal=0, **model_params
+        )
 
         # Train models
-        model_biased.fit(X, Z, batch_size=batch_size, max_epochs=max_epochs)
-        model_mine.fit(X, Z, batch_size=batch_size, max_epochs=max_epochs)
-        model_remine.fit(X, Z, batch_size=batch_size, max_epochs=max_epochs)
+        model_biased.fit(X, Z, **train_params)
+        model_mine.fit(X, Z, **train_params)
+        model_remine.fit(X, Z, **train_params)
 
         # Get mi estimation
         mi_mine_biased[i] = model_biased.get_mi()
@@ -70,6 +78,11 @@ def testMine():
     plot(axs[0], Rho, mi_teo, mi_mine_biased, label=loss1)
     plot(axs[1], Rho, mi_teo, mi_mine, label=loss2)
     plot(axs[2], Rho, mi_teo, mi_remine, label=loss3)
+    axs[0].set_xlabel("rho")
+    axs[1].set_xlabel("rho")
+    axs[2].set_xlabel("rho")
+    axs[0].set_ylabel("mi")
+    fig.suptitle("Mutual information neural estimation", fontsize=13)
     plt.show()
 
 

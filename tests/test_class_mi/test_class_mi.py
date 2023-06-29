@@ -8,13 +8,6 @@ from tqdm import tqdm
 from minepy.class_mi.class_mi import ClassMI
 
 
-def plot(ax, Rho, teo_mi, mi, label):
-    ax.plot(Rho, teo_mi, ".k", label="True")
-    ax.plot(Rho, mi, "b", label=label)
-    ax.legend(loc="upper center")
-    ax.set_title(label)
-
-
 def testClassMi01():
     # Net
     input_dim = 2
@@ -23,8 +16,7 @@ def testClassMi01():
     mu = np.array([0, 0])
     Rho = np.linspace(-0.98, 0.98, 21)
     mi_teo = np.zeros(*Rho.shape)
-    class_mi01 = np.zeros(*mi_teo.shape)
-    class_mi02 = np.zeros(*mi_teo.shape)
+    class_mi = np.zeros(*mi_teo.shape)
 
     # Training
     batch_size = 300
@@ -33,11 +25,11 @@ def testClassMi01():
         "batch_size": batch_size,
         "max_epochs": max_epochs,
         "lr": 1e-3,
-        "lr_factor": 0.1,
+        "lr_factor": 0.5,
         "lr_patience": 10,
         "stop_patience": 100,
         "stop_min_delta": 0.01,
-        "verbose": True,
+        "verbose": False,
     }
     for i, rho in enumerate(tqdm(Rho)):
         # Generate data
@@ -55,13 +47,16 @@ def testClassMi01():
         # Train models
         class_mi_model.fit(X, Z, **train_params)
         # Get mi estimation
-        class_mi01[i], class_mi02[i] = class_mi_model.get_mi()
+        class_mi[i] = class_mi_model.get_mi()
 
-    # # Plot
-    fig, axs = plt.subplots(1, 2, sharex=True, sharey=True)
-    plot(axs[0], Rho, mi_teo, class_mi01, label="class01")
-    plot(axs[1], Rho, mi_teo, class_mi02, label="class02")
-    plt.show()
+    # Plot
+    fig, ax = plt.subplots(1, 1, sharex=True, sharey=True)
+    ax.plot(Rho, mi_teo, ".k", label="True mi")
+    ax.plot(Rho, class_mi, "b", label="Class mi")
+    ax.legend(loc="upper center")
+    ax.set_xlabel("rho")
+    ax.set_ylabel("mi")
+    ax.set_title("Classification based mutual information")
 
 
 def testClassMi02():
@@ -85,17 +80,17 @@ def testClassMi02():
     train_params = {
         "batch_size": batch_size,
         "max_epochs": max_epochs,
-        "lr": 1e-4,
-        "lr_factor": 0.5,
-        "lr_patience": 30,
-        "stop_patience": 500,
-        "stop_min_delta": 0.1,
+        "lr": 1e-3,
+        "lr_factor": 0.1,
+        "lr_patience": 10,
+        "stop_patience": 100,
+        "stop_min_delta": 0.01,
         "verbose": True,
     }
 
     class_mi_model.fit(X, Z, **train_params)
     # Get mi estimation
-    class_mi, _ = class_mi_model.get_mi()
+    class_mi = class_mi_model.get_mi()
     (
         Dkl_train,
         Dkl_val,
@@ -106,17 +101,28 @@ def testClassMi02():
     ) = class_mi_model.get_curves()
 
     print(f"MI={mi_teo}, MI_class={class_mi}")
-    # # Plot
-    fig, axs = plt.subplots(3, 1, sharex=True, sharey=True)
-    axs[0].plot(Dkl_train, "b", label="Dkl-Train")
-    axs[0].plot(Dkl_val, "r", label="Dkl-Val")
-    axs[1].plot(train_loss, "b", label="Train-loss")
-    axs[1].plot(val_loss, "r", label="Val-loss")
-    axs[2].plot(train_acc, "b", label="Train-acc")
-    axs[2].plot(val_acc, "r", label="Val-acc")
-    plt.show()
+    # Plot
+    fig, axs = plt.subplots(3, 1, sharex=True, sharey=False)
+    axs[0].plot(Dkl_train, "b", label="Train")
+    axs[0].plot(Dkl_val, "r", label="Val")
+    axs[0].set_title("Donsker-Varadhan representation")
+    axs[0].legend(loc="lower right")
+
+    axs[1].plot(train_loss, "b", label="Train")
+    axs[1].plot(val_loss, "r", label="Val")
+    axs[1].set_title("Cross-Entropy loss")
+
+    axs[2].plot(train_acc, "b", label="Train")
+    axs[2].plot(val_acc, "r", label="Val")
+    axs[2].set_title("Binary classifier accuracy")
+    axs[2].set_xlabel("Epochs")
+    fig.suptitle(
+        f"Curves for rho={rho}, true mi={mi_teo:.2f} and estim. mi={class_mi:.2f} ",
+        fontsize=13,
+    )
 
 
 if __name__ == "__main__":
-    testClassMi01()
+    # testClassMi01()
     testClassMi02()
+    plt.show()

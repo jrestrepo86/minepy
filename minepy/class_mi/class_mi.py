@@ -153,9 +153,8 @@ class ClassMI(nn.Module):
         return Dkl, loss, acc
 
     def get_mi(self):
-        # return self.val_dkl.max()
         mi, _, _ = self.calc_mi_fn(self.X, self.Z)
-        return mi, self.val_dkl.max()
+        return mi
 
     def get_curves(self):
         return (
