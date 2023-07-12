@@ -1,5 +1,10 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
+"""
+Classification conditional mutual information
+
+"""
+
 
 import math
 
@@ -9,13 +14,14 @@ import torch.nn as nn
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 from tqdm import tqdm
 
-from minepy.class_mi.class_mi_tools import class_mi_batch
-from minepy.minepy_tools import EarlyStopping, get_activation_fn, toColVector
+from minepy.class_mi.class_mi_tools import (class_cmi_batch, get_ycondz,
+                                            split_data_train_val)
+from minepy.minepy_tools import EarlyStopping, get_activation_fn
 
 EPS = 1e-6
 
 
-class ClassMI(nn.Module):
+class ClassCMI(nn.Module):
     def __init__(
         self, input_dim, hidden_dim=50, num_hidden_layers=2, afn="elu", device=None
     ):
@@ -25,7 +31,7 @@ class ClassMI(nn.Module):
         else:
             self.device = device
         torch.device(self.device)
-
+        # create model
         activation_fn = get_activation_fn(afn)
         seq = [nn.Linear(input_dim, hidden_dim), activation_fn()]
         for _ in range(num_hidden_layers):
@@ -34,15 +40,15 @@ class ClassMI(nn.Module):
         self.model = nn.Sequential(*seq)
         self.model = self.model.to(self.device)
 
-    def forward(self, x, z, x_marg, z_marg):
+    def forward(self, x, y, z, y_cz):
         n = x.shape[0]
 
         # samples from joint distribution
-        s_joint = torch.cat((x, z), dim=1)
+        s_joint = torch.cat((x, y, z), dim=1)
         # samples from product of marginal distribution
-        s_marg = torch.cat((x_marg, z_marg), dim=1)
+        s_cond = torch.cat((x, y_cz, z), dim=1)
 
-        samples = torch.cat((s_joint, s_marg), dim=0)
+        samples = torch.cat((s_joint, s_cond), dim=0)
         labels = torch.cat((torch.ones(n), torch.zeros(n)), dim=0).to(x.device)
 
         # random ordering
@@ -58,7 +64,9 @@ class ClassMI(nn.Module):
     def fit(
         self,
         X,
+        Y,
         Z,
+        knn=1,
         batch_size=64,
         max_epochs=2000,
         val_size=0.2,
@@ -70,6 +78,7 @@ class ClassMI(nn.Module):
         weight_decay=5e-5,
         verbose=False,
     ):
+        self.knn = knn
         opt = torch.optim.Adam(
             self.model.parameters(),
             lr=lr,
@@ -83,30 +92,17 @@ class ClassMI(nn.Module):
         early_stopping = EarlyStopping(
             patience=stop_patience, delta=int(stop_min_delta)
         )
-
-        X = torch.from_numpy(toColVector(X.astype(np.float32)))
-        Z = torch.from_numpy(toColVector(Z.astype(np.float32)))
-
-        N, _ = X.shape
-
-        val_size = int(val_size * N)
-        inds = np.random.permutation(N)
         (
-            val_idx,
-            train_idx,
-        ) = (
-            inds[:val_size],
-            inds[val_size:],
-        )
-        Xval, Xtrain = X[val_idx, :], X[train_idx, :]
-        Zval, Ztrain = Z[val_idx, :], Z[train_idx, :]
-
-        Xval = Xval.to(self.device)
-        Xtrain = Xtrain.to(self.device)
-        Zval = Zval.to(self.device)
-        Ztrain = Ztrain.to(self.device)
-        self.X = X.to(self.device)
-        self.Z = Z.to(self.device)
+            Xtrain,
+            Ytrain,
+            Ztrain,
+            Xval,
+            Yval,
+            Zval,
+            self.Xtest,
+            self.Ytest,
+            self.Ztest,
+        ) = split_data_train_val(X, Y, Z, val_size, self.device)
 
         self.loss_fn = nn.BCEWithLogitsLoss()
         val_loss_epoch = []
@@ -119,14 +115,12 @@ class ClassMI(nn.Module):
         for i in tqdm(range(max_epochs), disable=not verbose):
             # training
             self.train()
-            for x, z, x_marg, z_marg in class_mi_batch(
-                Xtrain, Ztrain, batch_size=batch_size
+            for x, y, z, y_cz in class_cmi_batch(
+                Xtrain, Ytrain, Ztrain, self.knn, batch_size=batch_size
             ):
-                # x = x.to(self.device)
-                # z = z.to(self.device)
                 opt.zero_grad()
                 with torch.set_grad_enabled(True):
-                    logits, labels, _ = self.forward(x, z, x_marg, z_marg)
+                    logits, labels, _ = self.forward(x, y, z, y_cz)
                     loss = self.loss_fn(logits, labels)
                     loss.backward()
                     opt.step()
@@ -135,21 +129,21 @@ class ClassMI(nn.Module):
             torch.set_grad_enabled(False)
             self.eval()
             with torch.no_grad():
-                dkl, loss, acc = self.calc_mi_fn(Xtrain, Ztrain)
+                dkl, loss, acc = self.calc_cmi_fn(Xtrain, Ytrain, Ztrain)
                 train_dkl.append(dkl.item())
                 train_loss_epoch.append(loss.item())
                 train_acc_epoch.append(acc.item())
-                dkl, loss, acc = self.calc_mi_fn(Xval, Zval)
+                dkl, loss, acc = self.calc_cmi_fn(Xval, Yval, Zval)
                 val_dkl.append(dkl.item())
                 val_loss_epoch.append(loss.item())
                 val_acc_epoch.append(acc.item())
                 # learning rate scheduler
-                scheduler.step(acc.item())
+                # scheduler.step(acc.item())
                 # early stopping
-                early_stopping(-acc)
+                # early_stopping(-acc)
 
-            if early_stopping.early_stop:
-                break
+            # if early_stopping.early_stop:
+            #     break
 
         self.train_dkl = np.array(train_dkl)
         self.train_loss_epoch = np.array(train_loss_epoch)
@@ -158,11 +152,10 @@ class ClassMI(nn.Module):
         self.val_loss_epoch = np.array(val_loss_epoch)
         self.val_acc_epoch = np.array(val_acc_epoch)
 
-    def calc_mi_fn(self, x, z):
-        n = len(x)
-        x_marg = x[torch.randperm(n)].to(self.device)
-        z_marg = z[torch.randperm(n)].to(self.device)
-        logit, labels, probs = self.forward(x, z, x_marg, z_marg)
+    def calc_cmi_fn(self, x, y, z):
+        x, y, z, y_cz = get_ycondz(x, y, z, k=1)
+
+        logit, labels, probs = self.forward(x, y, z, y_cz)
         # get loss function
         loss = self.loss_fn(logit, labels)
         # Calculate accuracy
@@ -181,8 +174,8 @@ class ClassMI(nn.Module):
         return Dkl, loss, acc
 
     def get_mi(self):
-        mi, _, _ = self.calc_mi_fn(self.X, self.Z)
-        return mi
+        cmi, _, _ = self.calc_cmi_fn(self.Xtest, self.Ytest, self.Ztest)
+        return cmi
 
     def get_curves(self):
         return (
