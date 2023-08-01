@@ -37,12 +37,12 @@ def testClassMi01():
             mean=mu, cov=cov_matrix, size=(10000, 1)
         )
         X = np.squeeze(joint_samples_train[:, :, 0])
-        Z = np.squeeze(joint_samples_train[:, :, 1])
+        Y = np.squeeze(joint_samples_train[:, :, 1])
 
         # Teoric value
         mi_teo[i] = -0.5 * np.log(1 - rho**2)
         # models
-        class_mi_model = ClassMI(X, Z, **model_params)
+        class_mi_model = ClassMI(X, Y, **model_params)
         # Train models
         class_mi_model.fit(**train_params)
         # Get mi estimation
@@ -69,9 +69,9 @@ def testClassMi02():
         mean=mu, cov=cov_matrix, size=(10000, 1)
     )
     X = np.squeeze(joint_samples_train[:, :, 0])
-    Z = np.squeeze(joint_samples_train[:, :, 1])
+    Y = np.squeeze(joint_samples_train[:, :, 1])
     # models
-    class_mi_model = ClassMI(X, Z, **model_params)
+    class_mi_model = ClassMI(X, Y, **model_params)
     # Train models
     batch_size = 300
     max_epochs = 3000

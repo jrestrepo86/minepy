@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 """
 Classification conditional mutual information
-
+generator approach
 """
 
 

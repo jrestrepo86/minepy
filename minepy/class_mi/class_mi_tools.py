@@ -2,7 +2,6 @@
 # -*- coding: utf-8 -*-
 """
 Classification mutual information tools
-
 """
 
 
@@ -55,10 +54,10 @@ class class_mi_data_loader:
     def set_joint_marginals(self):
         n = self.N
         # set marginals
-        X_marg = self.X[np.random.permutation(n)]
-        Y_marg = self.Y[np.random.permutation(n)]
+        X_marg = self.X[np.random.permutation(n), :]
+        Y_marg = self.Y[np.random.permutation(n), :]
         if self.dz:
-            Z_marg = self.Z[np.random.permutation(n)]
+            Z_marg = self.Z[np.random.permutation(n), :]
             data_joint = np.hstack((self.X, self.Y, self.Z))
             data_marg = np.hstack((X_marg, Y_marg, Z_marg))
         else:
@@ -169,37 +168,3 @@ def get_ycondz(x, y, z, k=1):
     indx = nbrs.kneighbors(ztest.cpu(), return_distance=False).flatten()
     y_cz = ytrain[indx, :]
     return xtest, ytest, ztest, y_cz
-
-
-def split_data_train_val(X, Y, Z, val_size, device):
-    X = torch.from_numpy(toColVector(X.astype(np.float32)))
-    Y = torch.from_numpy(toColVector(Y.astype(np.float32)))
-    Z = torch.from_numpy(toColVector(Z.astype(np.float32)))
-
-    N, _ = X.shape
-
-    val_size = int(val_size * N)
-    inds = np.random.permutation(N)
-    (
-        val_idx,
-        train_idx,
-    ) = (
-        inds[:val_size],
-        inds[val_size:],
-    )
-    Xval, Xtrain = X[val_idx, :], X[train_idx, :]
-    Yval, Ytrain = Y[val_idx, :], Y[train_idx, :]
-    Zval, Ztrain = Z[val_idx, :], Z[train_idx, :]
-
-    Xval = Xval.to(device)
-    Xtrain = Xtrain.to(device)
-    Yval = Xval.to(device)
-    Ytrain = Xtrain.to(device)
-    Zval = Zval.to(device)
-    Ztrain = Ztrain.to(device)
-
-    Xtest = X.to(device)
-    Ytest = Y.to(device)
-    Ztest = Z.to(device)
-
-    return Xtrain, Ytrain, Ztrain, Xval, Yval, Zval, Xtest, Ytest, Ztest

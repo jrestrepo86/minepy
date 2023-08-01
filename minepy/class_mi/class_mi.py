@@ -1,5 +1,18 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
+"""
+Classifier based mutual information
+
+@inproceedings{
+  title={CCMI: Classifier based conditional mutual information estimation},
+  author={Mukherjee, Sudipto and Asnani, Himanshu and Kannan, Sreeram},
+  booktitle={Uncertainty in artificial intelligence},
+  pages={1083--1093},
+  year={2020},
+  organization={PMLR}
+
+}
+"""
 
 import math
 
@@ -17,7 +30,7 @@ EPS = 1e-6
 
 class ClassMI(nn.Module):
     def __init__(
-        self, X, Z, hidden_dim=50, num_hidden_layers=2, afn="elu", device=None
+        self, X, Y, Z=None, hidden_dim=50, num_hidden_layers=2, afn="elu", device=None
     ):
         super().__init__()
         # select device
@@ -28,10 +41,18 @@ class ClassMI(nn.Module):
         torch.device(self.device)
         # Vars
         self.X = toColVector(X.astype(np.float32))
-        self.Z = toColVector(Z.astype(np.float32))
+        self.Y = toColVector(Y.astype(np.float32))
+        self.dx = self.X.shape[1]
+        self.dy = self.Y.shape[1]
+        if Z is None:
+            self.dz = 0
+        else:
+            self.Z = toColVector(Z.astype(np.float32))
+            self.dz = self.Z.shape[1]
+
         # setup model
         self.model = ClassMiModel(
-            input_dim=self.X.shape[1] + self.Z.shape[1],
+            input_dim=self.dx + self.dy + self.dz,
             hidden_dim=hidden_dim,
             num_hidden_layers=num_hidden_layers,
             afn=afn,
@@ -70,9 +91,14 @@ class ClassMI(nn.Module):
             patience=stop_patience, delta=int(stop_min_delta)
         )
 
-        self.data_loader = class_mi_data_loader(
-            self.X, self.Z, val_size=val_size, device=self.device
-        )
+        if self.dz:
+            self.data_loader = class_mi_data_loader(
+                self.X, self.Y, self.Z, val_size=val_size, device=self.device
+            )
+        else:
+            self.data_loader = class_mi_data_loader(
+                self.X, self.Y, val_size=val_size, device=self.device
+            )
 
         self.loss_fn = nn.BCEWithLogitsLoss()
         val_loss_epoch = []
@@ -112,7 +138,8 @@ class ClassMI(nn.Module):
                 # learning rate scheduler
                 scheduler.step(acc.item())
                 # early stopping
-                early_stopping(-acc)
+                # early_stopping(-acc)
+                early_stopping(loss)
 
             if early_stopping.early_stop:
                 break
@@ -145,7 +172,7 @@ class ClassMI(nn.Module):
 
     def get_mi(self):
         mi, _, _ = self.calc_mi_fn(self.data_loader.data, self.data_loader.labels)
-        return mi
+        return mi.item()
 
     def get_curves(self):
         return (

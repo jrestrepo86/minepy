@@ -2,11 +2,10 @@
 # -*- coding: utf-8 -*-
 
 import numpy as np
-import torch
 from matplotlib import pyplot as plt
 from tqdm import tqdm
 
-from minepy.class_mi.class_cmi import ClassCMI
+from minepy.class_mi.class_cmi_diff import ClassCMIDiff
 
 
 def coupledHenon(n, c):
@@ -29,67 +28,76 @@ def coupledHenon(n, c):
 
 
 def testClassCMi02():
-    input_dim = 3
-    model_params = {
-        "hidden_dim": 50,
-        "afn": "relu",
-        "num_hidden_layers": 3,
-    }
-
     # Generate data
-    n = 5000
+    n = 10000
     c = 0.0
     henon = coupledHenon(n, c)
-    u = 2
-    X = np.squeeze(henon[: n - u, 0])
-    Y = np.squeeze(henon[: n - u, 1])
-    Z = np.squeeze(henon[u:, 0])
+    u = 1
+    X = np.squeeze(henon[u:, 1])  # target
+    Y = np.squeeze(henon[: n - u, 0])  # source
+    Z = np.squeeze(henon[: n - u, 1])  # target history
 
     # models
-    class_cmi_model = ClassCMI(input_dim, **model_params)
+    model_params = {
+        "hidden_dim": 100,
+        "afn": "elu",
+        "num_hidden_layers": 5,
+    }
+    class_cmi_model = ClassCMIDiff(X, Y, Z, **model_params)
     # Train models
-    batch_size = 500
+    batch_size = 300
     max_epochs = 5000
     train_params = {
         "batch_size": batch_size,
         "max_epochs": max_epochs,
-        "knn": 1,
-        "lr": 1e-3,
-        "lr_factor": 0.1,
-        "lr_patience": 10,
+        "lr": 1e-4,
+        "lr_factor": 0.5,
+        "lr_patience": 50,
         "stop_patience": 100,
         "stop_min_delta": 0.01,
         "verbose": True,
     }
 
-    class_cmi_model.fit(X, Y, Z, **train_params)
+    class_cmi_model.fit(**train_params)
     # Get mi estimation
-    class_cmi = class_cmi_model.get_mi()
+    class_cmi = class_cmi_model.get_cmi()
     (
-        Dkl_train,
-        Dkl_val,
-        train_loss,
-        val_loss,
-        train_acc,
-        val_acc,
+        cmi_train,
+        cmi_val,
+        Dkl_train_xyz,
+        Dkl_val_xyz,
+        train_loss_xyz,
+        val_loss_xyz,
+        train_acc_xyz,
+        val_acc_xyz,
+        Dkl_train_xz,
+        Dkl_val_xz,
+        train_loss_xz,
+        val_loss_xz,
+        train_acc_xz,
+        val_acc_xz,
     ) = class_cmi_model.get_curves()
 
-    print(f"C={c}, CMI={class_cmi}")
+    print(f"C={c}, CMI={class_cmi}, CMI2={Dkl_val_xyz[-1] - Dkl_val_xz[-1]}")
+    # print(f"C={c}, CMI={class_cmi}")
     # Plot
     fig, axs = plt.subplots(3, 1, sharex=True, sharey=False)
-    axs[0].plot(Dkl_train, "b", label="Train")
-    axs[0].plot(Dkl_val, "r", label="Val")
+    axs[0].plot(Dkl_val_xyz, "b", label="XYZ")
+    axs[0].plot(Dkl_val_xz, "r", label="XZ")
     axs[0].set_title("Donsker-Varadhan representation")
     axs[0].legend(loc="lower right")
 
-    axs[1].plot(train_loss, "b", label="Train")
-    axs[1].plot(val_loss, "r", label="Val")
-    axs[1].set_title("Cross-Entropy loss")
-
-    axs[2].plot(train_acc, "b", label="Train")
-    axs[2].plot(val_acc, "r", label="Val")
-    axs[2].set_title("Binary classifier accuracy")
-    axs[2].set_xlabel("Epochs")
+    axs[1].plot(val_acc_xyz, "b", label="XYZ")
+    axs[1].plot(val_acc_xz, "r", label="XZ")
+    axs[1].set_title("Accuracy")
+    axs[2].plot(val_loss_xyz, "b", label="XYZ")
+    axs[2].plot(val_loss_xz, "r", label="XZ")
+    axs[2].set_title("Cross-Entropy loss")
+    #
+    # axs[2].plot(train_acc, "b", label="Train")
+    # axs[2].plot(val_acc, "r", label="Val")
+    # axs[2].set_title("Binary classifier accuracy")
+    # axs[2].set_xlabel("Epochs")
     # fig.suptitle(
     #     f"Curves for rho={rho}, true mi={mi_teo:.2f} and estim. mi={class_mi:.2f} ",
     #     fontsize=13,
