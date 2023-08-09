@@ -9,7 +9,7 @@ from minepy.class_mi.class_mi import ClassMI
 
 
 def testClassMi01():
-    # Net
+    # Net parameters
     model_params = {"hidden_dim": 50, "afn": "relu", "num_hidden_layers": 3}
 
     mu = np.array([0, 0])
@@ -25,7 +25,7 @@ def testClassMi01():
         "max_epochs": max_epochs,
         "lr": 1e-3,
         "lr_factor": 0.5,
-        "lr_patience": 10,
+        "lr_patience": 30,
         "stop_patience": 100,
         "stop_min_delta": 0.01,
         "verbose": False,
@@ -78,8 +78,8 @@ def testClassMi02():
     train_params = {
         "batch_size": batch_size,
         "max_epochs": max_epochs,
-        "lr": 1e-4,
-        "lr_factor": 0.1,
+        "lr": 1e-3,
+        "lr_factor": 0.5,
         "lr_patience": 30,
         "stop_patience": 100,
         "stop_min_delta": 0.01,
@@ -89,28 +89,18 @@ def testClassMi02():
     class_mi_model.fit(**train_params)
     # Get mi estimation
     class_mi = class_mi_model.get_mi()
-    (
-        Dkl_train,
-        Dkl_val,
-        train_loss,
-        val_loss,
-        train_acc,
-        val_acc,
-    ) = class_mi_model.get_curves()
+    Dkl_val, val_loss, val_acc = class_mi_model.get_curves()
 
     print(f"MI={mi_teo}, MI_class={class_mi}")
     # Plot
     fig, axs = plt.subplots(3, 1, sharex=True, sharey=False)
-    axs[0].plot(Dkl_train, "b", label="Train")
     axs[0].plot(Dkl_val, "r", label="Val")
     axs[0].set_title("Donsker-Varadhan representation")
     axs[0].legend(loc="lower right")
 
-    axs[1].plot(train_loss, "b", label="Train")
     axs[1].plot(val_loss, "r", label="Val")
     axs[1].set_title("Cross-Entropy loss")
 
-    axs[2].plot(train_acc, "b", label="Train")
     axs[2].plot(val_acc, "r", label="Val")
     axs[2].set_title("Binary classifier accuracy")
     axs[2].set_xlabel("Epochs")

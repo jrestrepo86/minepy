@@ -100,7 +100,9 @@ class ClassCMIDiff(nn.Module):
 
     def get_cmi(self):
         mi_xyz = self.mi_xyz.get_mi()
-        mi_xz = self.mi_xz.get_mi()
+        data = self.mi_xyz.data_loader.data_p
+        labels = self.mi_xyz.data_loader.labels_p
+        mi_xz = self.mi_xz.get_mi(data=data, labels=labels)
         return mi_xyz - mi_xz
 
     def get_curves(self):

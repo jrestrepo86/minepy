@@ -12,27 +12,7 @@ import torch.nn as nn
 from matplotlib.pyplot import cla
 from sklearn.neighbors import NearestNeighbors
 
-from minepy.minepy_tools import get_activation_fn, toColVector
-
 EPS = 1e-6
-
-
-class ClassMiModel(nn.Module):
-    def __init__(self, input_dim, hidden_dim=50, num_hidden_layers=2, afn="elu"):
-        super().__init__()
-
-        activation_fn = get_activation_fn(afn)
-        seq = [nn.Linear(input_dim, hidden_dim), activation_fn()]
-        for _ in range(num_hidden_layers):
-            seq += [nn.Linear(hidden_dim, hidden_dim), activation_fn()]
-        seq += [nn.Linear(hidden_dim, 1)]
-        self.model = nn.Sequential(*seq)
-
-    def forward(self, samples):
-        logit = torch.squeeze(self.model(samples))
-        probs = torch.sigmoid(logit)
-
-        return logit, probs
 
 
 class class_mi_data_loader:
@@ -64,50 +44,51 @@ class class_mi_data_loader:
             data_joint = np.hstack((self.X, self.Y))
             data_marg = np.hstack((X_marg, Y_marg))
 
-        self.data = np.vstack((data_joint, data_marg))
+        self.samples = np.vstack((data_joint, data_marg))
         self.labels = np.squeeze(np.vstack((np.ones((n, 1)), np.zeros((n, 1)))))
 
     def split_train_val(self):
-        n = self.data.shape[0]
+        n = self.samples.shape[0]
+        self.train = {}
+        self.val = {}
         # send data top device
-        self.data = torch.from_numpy(self.data).to(self.device)
+        self.samples = torch.from_numpy(self.samples).to(self.device)
         self.labels = torch.from_numpy(self.labels).to(self.device)
 
         # mix samples
         inds = np.random.permutation(n)
-        self.data = self.data[inds, :].to(self.device)
+        self.samples = self.samples[inds, :].to(self.device)
         self.labels = self.labels[inds].to(self.device)
         # split data in training and validation sets
         val_size = int(self.val_size * n)
         inds = torch.randperm(n)
         (val_idx, train_idx) = (inds[:val_size], inds[val_size:])
 
-        self.train_data = self.data[train_idx, :].to(self.device)
-        self.train_labels = self.labels[train_idx].to(self.device)
+        self.train["samples"] = self.samples[train_idx, :].to(self.device)
+        self.train["labels"] = self.labels[train_idx].to(self.device)
 
-        self.val_data = self.data[val_idx, :].to(self.device)
-        self.val_labels = self.labels[val_idx].to(self.device)
+        self.val["samples"] = self.samples[val_idx, :].to(self.device)
+        self.val["labels"] = self.labels[val_idx].to(self.device)
 
-    def batch(self, batch_size=1):
-        data = self.train_data
-        labels = self.train_labels
-        n = data.shape[0]
-        # mix data for train batches
-        rand_perm = torch.randperm(n)
-        data = data[rand_perm, :]
-        labels = labels[rand_perm]
 
-        batches = []
-        for i in range(n // batch_size):
-            inds = np.arange(i * batch_size, (i + 1) * batch_size, dtype=int)
-            batches.append(
-                (
-                    data[inds, :],
-                    labels[inds],
-                )
+def batch(data, labels, batch_size=1):
+    n = data.shape[0]
+    # mix data for train batches
+    rand_perm = torch.randperm(n)
+    data = data[rand_perm, :]
+    labels = labels[rand_perm]
+
+    batches = []
+    for i in range(n // batch_size):
+        inds = np.arange(i * batch_size, (i + 1) * batch_size, dtype=int)
+        batches.append(
+            (
+                data[inds, :],
+                labels[inds],
             )
+        )
 
-        return batches
+    return batches
 
 
 def class_cmi_batch(x, y, z, k=1, batch_size=1, shuffle=True):

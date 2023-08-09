@@ -30,7 +30,7 @@ def coupledHenon(n, c):
 def testClassCMi02():
     # Generate data
     n = 10000
-    c = 0.0
+    c = 0.8
     henon = coupledHenon(n, c)
     u = 1
     X = np.squeeze(henon[u:, 1])  # target
@@ -39,20 +39,20 @@ def testClassCMi02():
 
     # models
     model_params = {
-        "hidden_dim": 100,
+        "hidden_dim": 150,
         "afn": "elu",
-        "num_hidden_layers": 5,
+        "num_hidden_layers": 3,
     }
     class_cmi_model = ClassCMIDiff(X, Y, Z, **model_params)
     # Train models
-    batch_size = 300
+    batch_size = 150
     max_epochs = 5000
     train_params = {
         "batch_size": batch_size,
         "max_epochs": max_epochs,
-        "lr": 1e-4,
+        "lr": 1e-3,
         "lr_factor": 0.5,
-        "lr_patience": 50,
+        "lr_patience": 1000,
         "stop_patience": 100,
         "stop_min_delta": 0.01,
         "verbose": True,
