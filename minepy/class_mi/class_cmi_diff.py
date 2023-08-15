@@ -13,7 +13,8 @@ import torch.nn as nn
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 from tqdm import tqdm
 
-from minepy.class_mi.class_mi import ClassMI
+from minepy.class_mi.class_mi import ClassMiModel
+from minepy.class_mi.class_mi_tools import class_cmi_diff_data_loader
 from minepy.minepy_tools import EarlyStopping, toColVector
 
 EPS = 1e-6
@@ -34,23 +35,24 @@ class ClassCMIDiff(nn.Module):
         self.X = toColVector(X.astype(np.float32))
         self.Y = toColVector(Y.astype(np.float32))
         self.Z = toColVector(Z.astype(np.float32))
-        # setup models
-        self.mi_xyz = ClassMI(
-            self.X,
-            self.Y,
-            self.Z,
+        dx = self.X.shape[1]
+        dy = self.Y.shape[1]
+        dz = self.Z.shape[1]
+        # model for I(X,Y,Z)
+        self.model_xyz = ClassMiModel(
+            input_dim=dx + dy + dz,
             hidden_dim=hidden_dim,
             num_hidden_layers=num_hidden_layers,
             afn=afn,
-            device=device,
+            device=self.device,
         )
-        self.mi_xz = ClassMI(
-            self.X,
-            self.Z,
+        # model for I(X,Z)
+        self.model_xz = ClassMiModel(
+            input_dim=dx + dz,
             hidden_dim=hidden_dim,
             num_hidden_layers=num_hidden_layers,
             afn=afn,
-            device=device,
+            device=self.device,
         )
 
     def fit(
@@ -69,7 +71,6 @@ class ClassCMIDiff(nn.Module):
         fit_params = {
             "batch_size": batch_size,
             "max_epochs": max_epochs,
-            "val_size": val_size,
             "lr": lr,
             "lr_factor": lr_factor,
             "lr_patience": lr_patience,
@@ -78,51 +79,61 @@ class ClassCMIDiff(nn.Module):
             "weight_decay": weight_decay,
             "verbose": verbose,
         }
-        # train I(X,Y,Z) and I(X,Z)
-        self.mi_xyz.fit(**fit_params)
-        self.mi_xz.fit(**fit_params)
+
+        self.data_loader = class_cmi_diff_data_loader(
+            self.X, self.Y, self.Z, val_size=val_size, device=self.device
+        )
+        # I(X,Y,Z)
         (
-            self.Dkl_train_xyz,
-            self.Dkl_val_xyz,
-            self.train_loss_xyz,
-            self.val_loss_xyz,
-            self.train_acc_xyz,
-            self.val_acc_xyz,
-        ) = self.mi_xyz.get_curves()
+            self.val_dkl_xyz,
+            self.val_loss_epoch_xyz,
+            self.val_acc_epoch_xyz,
+        ) = self.model_xyz.fit_model(
+            self.data_loader.train_samples_xyz,
+            self.data_loader.train_labels_xyz,
+            self.data_loader.val_samples_xyz,
+            self.data_loader.val_labels_xyz,
+            **fit_params
+        )
+        # I(X,Z)
         (
-            self.Dkl_train_xz,
-            self.Dkl_val_xz,
-            self.train_loss_xz,
-            self.val_loss_xz,
-            self.train_acc_xz,
-            self.val_acc_xz,
-        ) = self.mi_xz.get_curves()
+            self.val_dkl_xz,
+            self.val_loss_epoch_xz,
+            self.val_acc_epoch_xz,
+        ) = self.model_xz.fit_model(
+            self.data_loader.train_samples_xz,
+            self.data_loader.train_labels_xz,
+            self.data_loader.val_samples_xz,
+            self.data_loader.val_labels_xz,
+            **fit_params
+        )
 
     def get_cmi(self):
-        mi_xyz = self.mi_xyz.get_mi()
-        data = self.mi_xyz.data_loader.data_p
-        labels = self.mi_xyz.data_loader.labels_p
-        mi_xz = self.mi_xz.get_mi(data=data, labels=labels)
-        return mi_xyz - mi_xz
+        mi_xyz_test, _, _ = self.model_xyz.calc_mi_fn(
+            self.data_loader.samples_xyz, self.data_loader.labels_xyz
+        )
+        mi_xz_test, _, _ = self.model_xz.calc_mi_fn(
+            self.data_loader.samples_xz, self.data_loader.labels_xz
+        )
+        mi_xyz_val, _, _ = self.model_xyz.calc_mi_fn(
+            self.data_loader.val_samples_xyz, self.data_loader.val_labels_xyz
+        )
+        mi_xz_val, _, _ = self.model_xz.calc_mi_fn(
+            self.data_loader.val_samples_xz, self.data_loader.val_labels_xz
+        )
+        cmi_test = mi_xyz_test - mi_xz_test
+        cmi_val = mi_xyz_val - mi_xz_val
+        return cmi_test, cmi_val
 
     def get_curves(self):
-        min_epoch = np.minimum(self.Dkl_train_xyz.size, self.Dkl_train_xz.size)
-        cmi_train = self.Dkl_train_xyz[:min_epoch] - self.Dkl_train_xz[:min_epoch]
-        min_epoch = np.minimum(self.Dkl_val_xyz.size, self.Dkl_val_xz.size)
-        cmi_val = self.Dkl_val_xyz[:min_epoch] - self.Dkl_val_xz[:min_epoch]
+        min_epoch = np.minimum(self.val_dkl_xyz.size, self.val_dkl_xz.size)
+        cmi_val = self.val_dkl_xyz[:min_epoch] - self.val_dkl_xz[:min_epoch]
         return (
-            cmi_train,
             cmi_val,
-            self.Dkl_train_xyz,
-            self.Dkl_val_xyz,
-            self.train_loss_xyz,
-            self.val_loss_xyz,
-            self.train_acc_xyz,
-            self.val_acc_xyz,
-            self.Dkl_train_xz,
-            self.Dkl_val_xz,
-            self.train_loss_xz,
-            self.val_loss_xz,
-            self.train_acc_xz,
-            self.val_acc_xz,
+            self.val_dkl_xyz,
+            self.val_loss_epoch_xyz,
+            self.val_acc_epoch_xyz,
+            self.val_dkl_xz,
+            self.val_loss_epoch_xz,
+            self.val_acc_epoch_xz,
         )

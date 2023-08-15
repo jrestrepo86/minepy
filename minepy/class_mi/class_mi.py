@@ -123,7 +123,7 @@ class ClassMiModel(nn.Module):
                 val_loss_epoch.append(loss.item())
                 val_acc_epoch.append(acc.item())
                 # learning rate scheduler
-                scheduler.step(acc.item())
+                scheduler.step(loss)
                 # early stopping
                 early_stopping(loss)
 
@@ -135,14 +135,7 @@ class ClassMiModel(nn.Module):
 
 class ClassMI(nn.Module):
     def __init__(
-        self,
-        X,
-        Y,
-        Z=None,
-        hidden_dim=50,
-        num_hidden_layers=2,
-        afn="elu",
-        device=None,
+        self, X, Y, hidden_dim=50, num_hidden_layers=2, afn="elu", device=None
     ):
         super().__init__()
         # select device
@@ -156,15 +149,10 @@ class ClassMI(nn.Module):
         self.Y = toColVector(Y.astype(np.float32))
         self.dx = self.X.shape[1]
         self.dy = self.Y.shape[1]
-        if Z is None:
-            self.dz = 0
-        else:
-            self.Z = toColVector(Z.astype(np.float32))
-            self.dz = self.Z.shape[1]
 
         # setup model
         self.model = ClassMiModel(
-            input_dim=self.dx + self.dy + self.dz,
+            input_dim=self.dx + self.dy,
             hidden_dim=hidden_dim,
             num_hidden_layers=num_hidden_layers,
             afn=afn,
@@ -196,30 +184,22 @@ class ClassMI(nn.Module):
             "verbose": verbose,
         }
 
-        if self.dz:
-            self.data_loader = class_mi_data_loader(
-                self.X, self.Y, self.Z, val_size=val_size, device=self.device
-            )
-        else:
-            self.data_loader = class_mi_data_loader(
-                self.X, self.Y, val_size=val_size, device=self.device
-            )
+        self.data_loader = class_mi_data_loader(
+            self.X, self.Y, val_size=val_size, device=self.device
+        )
 
         self.val_dkl, self.val_loss_epoch, self.val_acc_epoch = self.model.fit_model(
-            self.data_loader.train["samples"],
-            self.data_loader.train["labels"],
-            self.data_loader.val["samples"],
-            self.data_loader.val["labels"],
+            self.data_loader.train_samples,
+            self.data_loader.train_labels,
+            self.data_loader.val_samples,
+            self.data_loader.val_labels,
             **fit_params
         )
 
-    def get_mi(self, data=None, labels=None):
-        if (data is None) or (labels is None):
-            mi, _, _ = self.model.calc_mi_fn(
-                self.data_loader.samples, self.data_loader.labels
-            )
-        else:
-            mi, _, _ = self.model.calc_mi_fn(data, labels)
+    def get_mi(self):
+        mi, _, _ = self.model.calc_mi_fn(
+            self.data_loader.samples, self.data_loader.labels
+        )
         return mi.item()
 
     def get_curves(self):

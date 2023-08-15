@@ -24,7 +24,7 @@ def toColVector(x):
 
 
 def embedding(x, m, tau):
-    """ Time series embedding """
+    """Time series embedding"""
     x = toColVector(x)
     n, k = x.shape
     l_ = n - (m - 1) * tau
@@ -32,7 +32,7 @@ def embedding(x, m, tau):
 
     for j in range(k):
         for i in range(m):
-            V[:, i + j * m] = x[i * tau:i * tau + l_, j]
+            V[:, i + j * m] = x[i * tau : i * tau + l_, j]
     return V
 
 
@@ -64,7 +64,6 @@ def get_activation_fn(afn):
 
 
 class EarlyStopping:
-
     def __init__(self, patience=5, delta=0):
         self.patience = patience
         self.delta = np.abs(delta)
@@ -83,3 +82,22 @@ class EarlyStopping:
                 self.counter += 1
         if self.counter >= self.patience:
             self.early_stop = True
+
+
+def coupledHenon(n, c):
+    """Coupled Henon map X1->X2"""
+    n0 = 3000
+    n = n + n0
+    x = np.zeros((n, 2))
+    x[0:2, :] = np.random.rand(2, 2)
+    for i in range(2, n):
+        x[i, 0] = 1.4 - x[i - 1, 0] ** 2 + 0.3 * x[i - 2, 0]
+
+        x[i, 1] = (
+            1.4
+            - c * x[i - 1, 0] * x[i - 1, 1]
+            - (1 - c) * x[i - 1, 1] ** 2
+            + 0.3 * x[i - 2, 1]
+        )
+
+    return x[n0:, :]
