@@ -39,7 +39,7 @@ def cmi(target, source, u, emb_params, model_params, train_params):
 
 
 def testClassCMI01():
-    emb_params = {"m": 3, "tau": 2}
+    emb_params = {"m": 1, "tau": 1}
     u = 1
     # model
     model_params = {
@@ -48,12 +48,12 @@ def testClassCMI01():
         "afn": "relu",
     }
     # embedding parameters
-    batch_size = 64
+    batch_size = 512
     max_epochs = 8000
     train_params = {
         "batch_size": batch_size,
         "max_epochs": max_epochs,
-        "knn": 10,
+        "knn": 2,
         "lr": 1e-4,
         "lr_factor": 0.5,
         "lr_patience": 100,
@@ -63,8 +63,8 @@ def testClassCMI01():
         "verbose": False,
     }
 
-    n = 20000
-    C = np.linspace(0, 0.8, 11)
+    n = 3000
+    C = np.linspace(0, 0.8, 13)
     Txy = np.zeros_like(C)
     Tyx = np.zeros_like(C)
     for i, c in enumerate(tqdm(C)):
@@ -87,12 +87,12 @@ def testClassCMI01():
 
 def testClassCMI02():
     # Generate data
-    n = 8000
+    n = 3000
     c = 0.45
     henon = coupledHenon(n, c)
     X = np.squeeze(henon[:, 0])
     Y = np.squeeze(henon[:, 1])
-    emb_params = {"m": 3, "tau": 1}  # embedding parameters
+    emb_params = {"m": 1, "tau": 1}  # embedding parameters
     u = 1
     model_params = {  # model parameters
         "hidden_dim": 128,
@@ -104,7 +104,7 @@ def testClassCMI02():
     train_params = {  # training parameters
         "batch_size": batch_size,
         "max_epochs": max_epochs,
-        "knn": 10,
+        "knn": 2,
         "lr": 1e-4,
         "lr_factor": 0.5,
         "lr_patience": 100,
@@ -132,7 +132,7 @@ def testClassCMI02():
     axs[2].set_title("Cross-Entropy loss")
     axs[2].plot(ret_xy["val_loss_epoch"], "b", label="X -> Y")
     axs[2].plot(ret_yx["val_loss_epoch"], "r", label="Y -> X")
-    axs[3].set_title("CMI Txy-Tyx")
+    axs[3].set_title("CMI Txy - Tyx")
     min_epoch = np.minimum(ret_xy["Dkl_val_epoch"].size, ret_yx["Dkl_val_epoch"].size)
     axs[3].plot(
         ret_xy["Dkl_val_epoch"][:min_epoch] - ret_yx["Dkl_val_epoch"][:min_epoch], "b"
@@ -140,6 +140,6 @@ def testClassCMI02():
 
 
 if __name__ == "__main__":
-    # testClassCMI01()
+    testClassCMI01()
     testClassCMI02()
     plt.show()
