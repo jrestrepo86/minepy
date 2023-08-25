@@ -47,7 +47,7 @@ def cmi(target, source, u, emb_params, model_params, train_params):
 
 
 def testClassCMI01():
-    emb_params = {"m": 3, "tau": 2}
+    emb_params = {"m": 1, "tau": 1}
     u = 1
     # model
     model_params = {
@@ -56,7 +56,7 @@ def testClassCMI01():
         "afn": "relu",
     }
     # embedding parameters
-    batch_size = 1000
+    batch_size = 512
     max_epochs = 8000
     train_params = {
         "batch_size": batch_size,
@@ -70,8 +70,8 @@ def testClassCMI01():
         "verbose": False,
     }
 
-    n = 20000
-    C = np.linspace(0, 0.8, 11)
+    n = 3000
+    C = np.linspace(0, 0.8, 13)
     Txy = np.zeros_like(C)
     Tyx = np.zeros_like(C)
     for i, c in enumerate(tqdm(C)):
@@ -94,25 +94,23 @@ def testClassCMI01():
 
 def testClassCMI02():
     # Generate data
-    n = 8000
-    c = 0.25
+    n = 3000
+    c = 0.45
     henon = coupledHenon(n, c)
     X = np.squeeze(henon[:, 0])
     Y = np.squeeze(henon[:, 1])
     emb_params = {"m": 1, "tau": 1}  # embedding parameters
     u = 1
-
     model_params = {  # model parameters
-        "hidden_dim": 250,
-        "num_hidden_layers": 2,
+        "hidden_dim": 128,
+        "num_hidden_layers": 3,
         "afn": "relu",
     }
-    batch_size = 250
+    batch_size = 256
     max_epochs = 8000
     train_params = {  # training parameters
         "batch_size": batch_size,
         "max_epochs": max_epochs,
-        "knn": 2,
         "lr": 1e-4,
         "lr_factor": 0.5,
         "lr_patience": 100,
@@ -124,7 +122,9 @@ def testClassCMI02():
 
     ret_xy = cmi(Y, X, u, emb_params, model_params, train_params)
     ret_yx = cmi(X, Y, u, emb_params, model_params, train_params)
-    # Train models
+
+    print(f"C={c}, X->Y CMI_TEST={ret_xy['cmi_test']}, CMI_VAL={ret_xy['cmi_val']}")
+    print(f"C={c}, Y->X CMI_TEST={ret_yx['cmi_test']}, CMI_VAL={ret_yx['cmi_val']}")
 
     # Plot
     fig, axs = plt.subplots(4, 1, sharex=True, sharey=False)

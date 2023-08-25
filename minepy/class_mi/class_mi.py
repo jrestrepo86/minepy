@@ -129,8 +129,13 @@ class ClassMiModel(nn.Module):
 
             if early_stopping.early_stop:
                 break
-
-        return (np.array(val_dkl), np.array(val_loss_epoch), np.array(val_acc_epoch))
+        fepoch = i
+        return (
+            np.array(val_dkl),
+            np.array(val_loss_epoch),
+            np.array(val_acc_epoch),
+            fepoch,
+        )
 
 
 class ClassMI(nn.Module):
@@ -188,7 +193,12 @@ class ClassMI(nn.Module):
             self.X, self.Y, val_size=val_size, device=self.device
         )
 
-        self.val_dkl, self.val_loss_epoch, self.val_acc_epoch = self.model.fit_model(
+        (
+            self.val_dkl_epoch,
+            self.val_loss_epoch,
+            self.val_acc_epoch,
+            self.fepoch,
+        ) = self.model.fit_model(
             self.data_loader.train_samples,
             self.data_loader.train_labels,
             self.data_loader.val_samples,
@@ -196,15 +206,22 @@ class ClassMI(nn.Module):
             **fit_params
         )
 
-    def get_mi(self):
+    def get_mi(self, all=False):
         mi, _, _ = self.model.calc_mi_fn(
             self.data_loader.samples, self.data_loader.labels
         )
-        return mi.item()
+        mi = mi.item()
+        if all:
+            ind_min_loss = np.argmin(self.val_loss_epoch)
+            mi_val_los = self.val_dkl_epoch[ind_min_loss]
+            mi_dkl_max = self.val_dkl_epoch.max()
+            return mi, mi_dkl_max, mi_val_los, self.fepoch
+        else:
+            return mi
 
     def get_curves(self):
         return (
-            self.val_dkl,
+            self.val_dkl_epoch,
             self.val_loss_epoch,
             self.val_acc_epoch,
         )
