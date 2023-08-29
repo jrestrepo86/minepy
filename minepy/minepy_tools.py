@@ -53,6 +53,7 @@ def get_activation_fn(afn):
         "softshrink": nn.Softshrink,
         "softsign": nn.Softsign,
         "tanhshrink": nn.Tanhshrink,
+        "softmax": nn.Softmax,
     }
 
     if afn not in activation_functions:
@@ -72,16 +73,13 @@ class EarlyStopping:
         self.min_loss = np.inf
 
     def __call__(self, loss):
-        if torch.abs(loss - self.min_loss) <= self.delta:
-            self.counter += 1
+        if loss < self.min_loss - self.delta:
+            self.min_loss = loss
+            self.counter = 0
         else:
-            if loss < self.min_loss:
-                self.min_loss = loss
-                self.counter = 0
-            else:
-                self.counter += 1
-        if self.counter >= self.patience:
-            self.early_stop = True
+            self.counter += 1
+            if self.counter >= self.patience:
+                self.early_stop = True
 
 
 def coupledHenon(n, c):

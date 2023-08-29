@@ -8,6 +8,7 @@ Classification mutual information tools
 import matplotlib.pyplot as plt
 import numpy as np
 import torch
+from numpy.core.shape_base import hstack
 from sklearn.neighbors import NearestNeighbors
 
 EPS = 1e-6
@@ -46,7 +47,9 @@ class class_mi_data_loader:
         data_joint = np.hstack((X, Y))
         data_marg = np.hstack((X_marg, Y_marg))
         samples = np.vstack((data_joint, data_marg))
-        labels = np.squeeze(np.vstack((np.ones((n, 1)), np.zeros((n, 1)))))
+        joint_labels = np.hstack((np.ones((n, 1)), np.zeros((n, 1))))
+        marg_labels = np.hstack((np.zeros((n, 1)), np.ones((n, 1))))
+        labels = np.squeeze(np.vstack((joint_labels, marg_labels)))
         self.samples = samples
         self.labels = labels
 
@@ -92,14 +95,18 @@ class class_cmi_diff_data_loader:
         inds = np.random.permutation(n)
         data_joint_xyz = np.hstack((X, Y, Z))
         data_marg_xyz = np.hstack((X, Y[inds, :], Z[inds, :]))
+        joint_labels = np.hstack((np.ones((n, 1)), np.zeros((n, 1))))
+        marg_labels = np.hstack((np.zeros((n, 1)), np.ones((n, 1))))
         self.samples_xyz = np.vstack((data_joint_xyz, data_marg_xyz))
-        self.labels_xyz = np.squeeze(np.vstack((np.ones((n, 1)), np.zeros((n, 1)))))
+        self.labels_xyz = np.squeeze(np.vstack((joint_labels, marg_labels)))
 
         # set joint  and marginal xz
         data_joint_xz = np.hstack((X, Z))
         data_marg_xz = np.hstack((X, Z[np.random.permutation(n), :]))
+        joint_labels = np.hstack((np.ones((n, 1)), np.zeros((n, 1))))
+        marg_labels = np.hstack((np.zeros((n, 1)), np.ones((n, 1))))
         self.samples_xz = np.vstack((data_joint_xz, data_marg_xz))
-        self.labels_xz = np.squeeze(np.vstack((np.ones((n, 1)), np.zeros((n, 1)))))
+        self.labels_xz = np.squeeze(np.vstack((joint_labels, marg_labels)))
 
     def split_train_val(self, val_size, device):
         n = self.samples_xyz.shape[0]

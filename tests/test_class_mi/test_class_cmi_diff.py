@@ -28,10 +28,8 @@ def cmi(target, source, u, emb_params, model_params, train_params):
         cmi_val_epoch,
         Dkl_val_xyz,
         val_loss_xyz,
-        val_acc_xyz,
         Dkl_val_xz,
         val_loss_xz,
-        val_acc_xz,
     ) = class_cmi_model.get_curves()
     return {
         "cmi_test": cmi_test,
@@ -39,10 +37,8 @@ def cmi(target, source, u, emb_params, model_params, train_params):
         "cmi_val_epoch": cmi_val_epoch,
         "Dkl_val_xyz": Dkl_val_xyz,
         "val_loss_xyz": val_loss_xyz,
-        "val_acc_xyz": val_acc_xyz,
         "Dkl_val_xz": Dkl_val_xz,
         "val_loss_xz": val_loss_xz,
-        "val_acc_xz": val_acc_xz,
     }
 
 
@@ -65,7 +61,7 @@ def testClassCMI01():
         "lr_factor": 0.5,
         "lr_patience": 100,
         "stop_patience": 300,
-        "stop_min_delta": 0.01,
+        "stop_min_delta": 0,
         "weight_decay": 1e-3,
         "verbose": False,
     }
@@ -127,35 +123,29 @@ def testClassCMI02():
     print(f"C={c}, Y->X CMI_TEST={ret_yx['cmi_test']}, CMI_VAL={ret_yx['cmi_val']}")
 
     # Plot
-    fig, axs = plt.subplots(4, 1, sharex=True, sharey=False)
+    fig, axs = plt.subplots(3, 1, sharex=True, sharey=False)
     T = ret_xy
     axs[0].plot(T["Dkl_val_xyz"], "b", label="XYZ")
     axs[0].plot(T["Dkl_val_xz"], "r", label="XZ")
     axs[0].set_title("Donsker-Varadhan representation")
     axs[0].legend(loc="lower right")
-    axs[1].plot(T["val_acc_xyz"], "b", label="XYZ")
-    axs[1].plot(T["val_acc_xz"], "r", label="XZ")
-    axs[1].set_title("Accuracy")
-    axs[2].plot(T["val_loss_xyz"], "b", label="XYZ")
-    axs[2].plot(T["val_loss_xz"], "r", label="XZ")
-    axs[2].set_title("Cross-Entropy loss")
-    axs[3].plot(T["cmi_val_epoch"], "b")
-    axs[3].set_title("CMI Txy")
+    axs[1].plot(T["val_loss_xyz"], "b", label="XYZ")
+    axs[1].plot(T["val_loss_xz"], "r", label="XZ")
+    axs[1].set_title("Cross-Entropy loss")
+    axs[2].plot(T["cmi_val_epoch"], "b")
+    axs[2].set_title("CMI Txy")
 
-    fig, axs = plt.subplots(4, 1, sharex=True, sharey=False)
+    fig, axs = plt.subplots(3, 1, sharex=True, sharey=False)
     T = ret_xy
     axs[0].plot(T["Dkl_val_xyz"], "b", label="XYZ")
     axs[0].plot(T["Dkl_val_xz"], "r", label="XZ")
     axs[0].set_title("Donsker-Varadhan representation")
     axs[0].legend(loc="lower right")
-    axs[1].plot(T["val_acc_xyz"], "b", label="XYZ")
-    axs[1].plot(T["val_acc_xz"], "r", label="XZ")
-    axs[1].set_title("Accuracy")
-    axs[2].plot(T["val_loss_xyz"], "b", label="XYZ")
-    axs[2].plot(T["val_loss_xz"], "r", label="XZ")
-    axs[2].set_title("Cross-Entropy loss")
-    axs[3].plot(T["cmi_val_epoch"], "b")
-    axs[3].set_title("CMI Tyx")
+    axs[1].plot(T["val_loss_xyz"], "b", label="XYZ")
+    axs[1].plot(T["val_loss_xz"], "r", label="XZ")
+    axs[1].set_title("Cross-Entropy loss")
+    axs[2].plot(T["cmi_val_epoch"], "b")
+    axs[2].set_title("CMI Tyx")
 
     fig, axs = plt.subplots(2, 1, sharex=True, sharey=False)
     axs[0].set_title("Donsker-Varadhan representation")

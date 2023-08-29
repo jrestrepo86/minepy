@@ -10,7 +10,6 @@ Classifier based mutual information
   pages={1083--1093},
   year={2020},
   organization={PMLR}
-
 }
 """
 
@@ -25,7 +24,11 @@ from tqdm import tqdm
 from minepy.class_mi.class_mi_tools import batch, class_mi_data_loader
 from minepy.minepy_tools import EarlyStopping, get_activation_fn, toColVector
 
-EPS = 1e-6
+EPS = 1e-10
+
+
+def ema(mu, alpha, past_ema):
+    return alpha * mu + (1.0 - alpha) * past_ema
 
 
 class ClassMiModel(nn.Module):
@@ -38,33 +41,35 @@ class ClassMiModel(nn.Module):
         seq = [nn.Linear(input_dim, hidden_dim), activation_fn()]
         for _ in range(num_hidden_layers):
             seq += [nn.Linear(hidden_dim, hidden_dim), activation_fn()]
-        seq += [nn.Linear(hidden_dim, 1)]
+        seq += [nn.Linear(hidden_dim, 2)]
         self.net = nn.Sequential(*seq).to(device)
+        self.softm = nn.Softmax(dim=1)
 
     def forward(self, samples):
-        logit = torch.squeeze(self.net(samples))
-        probs = torch.sigmoid(logit)
-
-        return logit, probs
+        logits = torch.squeeze(self.net(samples))
+        return logits
 
     def calc_mi_fn(self, samples, labels):
-        logit, probs = self.forward(samples)
+        logit = self.forward(samples)
+        probs = self.softm(logit)
+        inds = torch.argmax(labels, dim=1) > 0
+        marg_inds, joint_inds = inds, torch.logical_not(inds)
+
         # get loss function
         loss = self.loss_fn(logit, labels)
-        # Calculate accuracy
-        y_pred = torch.round(probs)
-        acc = torch.sum(y_pred == labels) / labels.shape[0]
 
-        labels = labels > 0
-        likel_ratio_p = (probs[labels] + EPS) / (1 - probs[labels] - EPS)
-        likel_ratio_q = (probs[torch.logical_not(labels)] + EPS) / (
-            1 - probs[torch.logical_not(labels)] - EPS
-        )
+        # calculate dkl bound
+        joint_gamma = probs[joint_inds, 0]
+        marg_gamma = probs[marg_inds, 0]
+
+        likel_ratio_p = (joint_gamma + EPS) / (1 - joint_gamma - EPS)
+        likel_ratio_q = (marg_gamma + EPS) / (1 - marg_gamma - EPS)
+
         fp = torch.log(torch.abs(likel_ratio_p))
         fq = torch.log(torch.abs(likel_ratio_q))
 
         Dkl = fp.mean() - (torch.logsumexp(fq, 0) - math.log(fq.shape[0]))
-        return Dkl, loss, acc
+        return Dkl, loss
 
     def fit_model(
         self,
@@ -78,7 +83,7 @@ class ClassMiModel(nn.Module):
         lr_factor=0.1,
         lr_patience=10,
         stop_patience=100,
-        stop_min_delta=0.05,
+        stop_min_delta=0,
         weight_decay=5e-5,
         verbose=False,
     ):
@@ -96,10 +101,8 @@ class ClassMiModel(nn.Module):
             patience=stop_patience, delta=int(stop_min_delta)
         )
 
-        self.loss_fn = nn.BCEWithLogitsLoss()
-        val_loss_epoch = []
-        val_acc_epoch = []
-        val_dkl = []
+        self.loss_fn = nn.CrossEntropyLoss()
+        val_loss_epoch, val_dkl_epoch = [], []
 
         for i in tqdm(range(max_epochs), disable=not verbose):
             # training
@@ -107,10 +110,10 @@ class ClassMiModel(nn.Module):
             for samples, labels in batch(
                 train_samples, train_labels, batch_size=batch_size
             ):
-                opt.zero_grad()
                 with torch.set_grad_enabled(True):
-                    logits, _ = self.forward(samples)
+                    logits = self.forward(samples)
                     loss = self.loss_fn(logits, labels)
+                    opt.zero_grad()
                     loss.backward()
                     opt.step()
 
@@ -118,22 +121,25 @@ class ClassMiModel(nn.Module):
             torch.set_grad_enabled(False)
             self.eval()
             with torch.no_grad():
-                dkl, loss, acc = self.calc_mi_fn(val_samples, val_labels)
-                val_dkl.append(dkl.item())
-                val_loss_epoch.append(loss.item())
-                val_acc_epoch.append(acc.item())
+                dkl, loss = self.calc_mi_fn(val_samples, val_labels)
+                val_dkl_epoch.append(dkl.item())
+                # smooth the loss
+                if i == 0:
+                    val_loss = loss
+                else:
+                    val_loss = ema(loss, 0.1, val_loss)
+                val_loss_epoch.append(val_loss.item())
                 # learning rate scheduler
-                scheduler.step(loss)
+                scheduler.step(val_loss)
                 # early stopping
-                early_stopping(loss)
+                early_stopping(val_loss)
 
             if early_stopping.early_stop:
                 break
         fepoch = i
         return (
-            np.array(val_dkl),
+            np.array(val_dkl_epoch),
             np.array(val_loss_epoch),
-            np.array(val_acc_epoch),
             fepoch,
         )
 
@@ -196,7 +202,6 @@ class ClassMI(nn.Module):
         (
             self.val_dkl_epoch,
             self.val_loss_epoch,
-            self.val_acc_epoch,
             self.fepoch,
         ) = self.model.fit_model(
             self.data_loader.train_samples,
@@ -207,9 +212,7 @@ class ClassMI(nn.Module):
         )
 
     def get_mi(self, all=False):
-        mi, _, _ = self.model.calc_mi_fn(
-            self.data_loader.samples, self.data_loader.labels
-        )
+        mi, _ = self.model.calc_mi_fn(self.data_loader.samples, self.data_loader.labels)
         mi = mi.item()
         if all:
             ind_min_loss = np.argmin(self.val_loss_epoch)
@@ -223,5 +226,4 @@ class ClassMI(nn.Module):
         return (
             self.val_dkl_epoch,
             self.val_loss_epoch,
-            self.val_acc_epoch,
         )

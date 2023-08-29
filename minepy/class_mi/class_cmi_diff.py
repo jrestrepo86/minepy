@@ -87,7 +87,7 @@ class ClassCMIDiff(nn.Module):
         (
             self.val_dkl_xyz,
             self.val_loss_epoch_xyz,
-            self.val_acc_epoch_xyz,
+            _,
         ) = self.model_xyz.fit_model(
             self.data_loader.train_samples_xyz,
             self.data_loader.train_labels_xyz,
@@ -99,7 +99,7 @@ class ClassCMIDiff(nn.Module):
         (
             self.val_dkl_xz,
             self.val_loss_epoch_xz,
-            self.val_acc_epoch_xz,
+            _,
         ) = self.model_xz.fit_model(
             self.data_loader.train_samples_xz,
             self.data_loader.train_labels_xz,
@@ -109,16 +109,16 @@ class ClassCMIDiff(nn.Module):
         )
 
     def get_cmi(self):
-        mi_xyz_test, _, _ = self.model_xyz.calc_mi_fn(
+        mi_xyz_test, _ = self.model_xyz.calc_mi_fn(
             self.data_loader.samples_xyz, self.data_loader.labels_xyz
         )
-        mi_xz_test, _, _ = self.model_xz.calc_mi_fn(
+        mi_xz_test, _ = self.model_xz.calc_mi_fn(
             self.data_loader.samples_xz, self.data_loader.labels_xz
         )
-        mi_xyz_val, _, _ = self.model_xyz.calc_mi_fn(
+        mi_xyz_val, _ = self.model_xyz.calc_mi_fn(
             self.data_loader.val_samples_xyz, self.data_loader.val_labels_xyz
         )
-        mi_xz_val, _, _ = self.model_xz.calc_mi_fn(
+        mi_xz_val, _ = self.model_xz.calc_mi_fn(
             self.data_loader.val_samples_xz, self.data_loader.val_labels_xz
         )
         cmi_test = mi_xyz_test - mi_xz_test
@@ -132,8 +132,6 @@ class ClassCMIDiff(nn.Module):
             cmi_val,
             self.val_dkl_xyz,
             self.val_loss_epoch_xyz,
-            self.val_acc_epoch_xyz,
             self.val_dkl_xz,
             self.val_loss_epoch_xz,
-            self.val_acc_epoch_xz,
         )
