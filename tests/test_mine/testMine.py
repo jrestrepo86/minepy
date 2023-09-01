@@ -31,17 +31,17 @@ def testMine():
     mi_remine = np.zeros(*mi_teo.shape)
 
     # Training
-    batch_size = 300
-    max_epochs = 3000
+    batch_size = 1000
+    max_epochs = 5000
     train_params = {
         "batch_size": batch_size,
         "max_epochs": max_epochs,
         "val_size": 0.2,
         "lr": 1e-3,
-        "lr_factor": 0.1,
-        "lr_patience": 10,
-        "stop_patience": 100,
-        "stop_min_delta": 0.01,
+        "lr_factor": 0.5,
+        "lr_patience": 100,
+        "stop_patience": 300,
+        "stop_min_delta": 0.00,
         "verbose": False,
     }
 
@@ -57,16 +57,16 @@ def testMine():
         # Teoric value
         mi_teo[i] = -0.5 * np.log(1 - rho**2)
         # models
-        model_biased = Mine(input_dim, loss=loss1, **model_params)
-        model_mine = Mine(input_dim, loss=loss2, alpha=0.01, **model_params)
+        model_biased = Mine(X, Z, loss=loss1, **model_params)
+        model_mine = Mine(X, Z, loss=loss2, alpha=0.01, **model_params)
         model_remine = Mine(
-            input_dim, loss=loss3, regWeight=0.1, targetVal=0, **model_params
+            X, Z, loss=loss3, regWeight=0.1, targetVal=0, **model_params
         )
 
         # Train models
-        model_biased.fit(X, Z, **train_params)
-        model_mine.fit(X, Z, **train_params)
-        model_remine.fit(X, Z, **train_params)
+        model_biased.fit(**train_params)
+        model_mine.fit(**train_params)
+        model_remine.fit(**train_params)
 
         # Get mi estimation
         mi_mine_biased[i] = model_biased.get_mi()

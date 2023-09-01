@@ -64,6 +64,33 @@ def get_activation_fn(afn):
     return activation_functions[afn]
 
 
+class MovingAverageSmooth:
+    def __init__(self):
+        self.ca = None
+        self.n = 0
+
+    def __call__(self, loss):
+        self.n += 1
+        if self.ca is None:
+            self.ca = loss
+        else:
+            self.ca = self.ca + (loss - self.ca) / self.n
+        return self.ca
+
+
+class ExpMovingAverageSmooth:
+    def __init__(self, alpha=0.01):
+        self.ema = None
+        self.alpha = alpha
+
+    def __call__(self, loss):
+        if self.ema is None:
+            self.ema = loss
+        else:
+            self.ema = self.alpha * loss + (1.0 - self.alpha) * self.ema
+        return self.ema
+
+
 class EarlyStopping:
     def __init__(self, patience=5, delta=0):
         self.patience = patience
