@@ -7,35 +7,37 @@ from tqdm import tqdm
 
 from minepy.class_mi.class_mi import ClassMI
 
+N = 10000
+# Net parameters
+model_params = {"hidden_dim": 50, "afn": "relu", "num_hidden_layers": 2}
+# Training
+batch_size = 512
+max_epochs = 5000
+train_params = {
+    "batch_size": batch_size,
+    "max_epochs": max_epochs,
+    "val_size": 0.2,
+    "lr": 1e-3,
+    "lr_factor": 0.5,
+    "lr_patience": 300,
+    "stop_patience": 600,
+    "stop_min_delta": 0,
+    "weight_decay": 5e-5,
+    "verbose": False,
+}
+
 
 def testClassMi01():
-    # Net parameters
-    model_params = {"hidden_dim": 150, "afn": "relu", "num_hidden_layers": 3}
-
     mu = np.array([0, 0])
     Rho = np.linspace(-0.98, 0.98, 21)
     mi_teo = np.zeros(*Rho.shape)
     class_mi = np.zeros(*mi_teo.shape)
 
-    # Training
-    batch_size = 256
-    max_epochs = 3000
-    train_params = {
-        "batch_size": batch_size,
-        "max_epochs": max_epochs,
-        "lr": 1e-3,
-        "lr_factor": 0.5,
-        "lr_patience": 30,
-        "stop_patience": 100,
-        "stop_min_delta": 0,
-        "weight_decay": 5e-5,
-        "verbose": False,
-    }
     for i, rho in enumerate(tqdm(Rho)):
         # Generate data
         cov_matrix = np.array([[1, rho], [rho, 1]])
         joint_samples_train = np.random.multivariate_normal(
-            mean=mu, cov=cov_matrix, size=(10000, 1)
+            mean=mu, cov=cov_matrix, size=(N, 1)
         )
         X = np.squeeze(joint_samples_train[:, :, 0])
         Y = np.squeeze(joint_samples_train[:, :, 1])
@@ -60,33 +62,18 @@ def testClassMi01():
 
 
 def testClassMi02():
-    model_params = {"hidden_dim": 50, "afn": "relu", "num_hidden_layers": 3}
     mu = np.array([0, 0])
     rho = 0.95
     mi_teo = -0.5 * np.log(1 - rho**2)
     # Generate data
     cov_matrix = np.array([[1, rho], [rho, 1]])
     joint_samples_train = np.random.multivariate_normal(
-        mean=mu, cov=cov_matrix, size=(10000, 1)
+        mean=mu, cov=cov_matrix, size=(N, 1)
     )
     X = np.squeeze(joint_samples_train[:, :, 0])
     Y = np.squeeze(joint_samples_train[:, :, 1])
     # models
     class_mi_model = ClassMI(X, Y, **model_params)
-    # Train models
-    batch_size = 256
-    max_epochs = 3000
-    train_params = {
-        "batch_size": batch_size,
-        "max_epochs": max_epochs,
-        "lr": 1e-3,
-        "lr_factor": 0.5,
-        "lr_patience": 30,
-        "stop_patience": 100,
-        "stop_min_delta": 0,
-        "weight_decay": 5e-5,
-        "verbose": True,
-    }
 
     class_mi_model.fit(**train_params)
     # Get mi estimation

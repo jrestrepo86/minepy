@@ -22,13 +22,10 @@ from torch.optim.lr_scheduler import ReduceLROnPlateau
 from tqdm import tqdm
 
 from minepy.class_mi.class_mi_tools import batch, class_mi_data_loader
-from minepy.minepy_tools import EarlyStopping, get_activation_fn, toColVector
+from minepy.minepy_tools import (EarlyStopping, ExpMovingAverageSmooth,
+                                 get_activation_fn, toColVector)
 
 EPS = 1e-10
-
-
-def ema(mu, alpha, past_ema):
-    return alpha * mu + (1.0 - alpha) * past_ema
 
 
 class ClassMiModel(nn.Module):
@@ -101,33 +98,32 @@ class ClassMiModel(nn.Module):
             patience=stop_patience, delta=int(stop_min_delta)
         )
 
+        val_loss_ema_smooth = ExpMovingAverageSmooth()
+
         self.loss_fn = nn.CrossEntropyLoss()
         val_loss_epoch, val_dkl_epoch = [], []
 
         for i in tqdm(range(max_epochs), disable=not verbose):
             # training
+            rand_perm = torch.randperm(train_samples.shape[0])
+            if batch_size == "full":
+                batch_size = train_samples.shape[0]
             self.train()
-            for samples, labels in batch(
-                train_samples, train_labels, batch_size=batch_size
-            ):
+            for inds in rand_perm.split(batch_size, dim=0):
                 with torch.set_grad_enabled(True):
-                    logits = self.forward(samples)
-                    loss = self.loss_fn(logits, labels)
                     opt.zero_grad()
+                    logits = self.forward(train_samples[inds, :])
+                    loss = self.loss_fn(logits, train_labels[inds, :])
                     loss.backward()
                     opt.step()
 
             # validate and testing
-            torch.set_grad_enabled(False)
             self.eval()
-            with torch.no_grad():
+            with torch.set_grad_enabled(False):
                 dkl, loss = self.calc_mi_fn(val_samples, val_labels)
                 val_dkl_epoch.append(dkl.item())
-                # smooth the loss
-                if i == 0:
-                    val_loss = loss
-                else:
-                    val_loss = ema(loss, 0.1, val_loss)
+                # val_loss = loss
+                val_loss = val_loss_ema_smooth(loss)
                 val_loss_epoch.append(val_loss.item())
                 # learning rate scheduler
                 scheduler.step(val_loss)
@@ -136,6 +132,7 @@ class ClassMiModel(nn.Module):
 
             if early_stopping.early_stop:
                 break
+
         fepoch = i
         return (
             np.array(val_dkl_epoch),
@@ -212,15 +209,13 @@ class ClassMI(nn.Module):
         )
 
     def get_mi(self, all=False):
-        mi, _ = self.model.calc_mi_fn(self.data_loader.samples, self.data_loader.labels)
-        mi = mi.item()
+        ind_min_loss = np.argmin(self.val_loss_epoch)
+        mi_val_loss = self.val_dkl_epoch[ind_min_loss]
+        mi_dkl_max = self.val_dkl_epoch.max()
         if all:
-            ind_min_loss = np.argmin(self.val_loss_epoch)
-            mi_val_los = self.val_dkl_epoch[ind_min_loss]
-            mi_dkl_max = self.val_dkl_epoch.max()
-            return mi, mi_dkl_max, mi_val_los, self.fepoch
+            return mi_dkl_max, mi_val_loss, self.fepoch
         else:
-            return mi
+            return mi_val_loss
 
     def get_curves(self):
         return (
