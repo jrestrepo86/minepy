@@ -143,10 +143,6 @@ class Mine(nn.Module):
         )
         self.model = self.model.to(self.device)
 
-    def forward(self, x, z):
-        loss, mi = self.model(x, z)
-        return loss, mi
-
     def fit(
         self,
         batch_size=64,
@@ -159,7 +155,9 @@ class Mine(nn.Module):
         stop_min_delta=0,
         verbose=False,
     ):
-        opt = torch.optim.Adam(self.model.parameters(), lr=lr, betas=(0.9, 0.999))
+        # opt = torch.optim.Adam(self.model.parameters(), lr=lr, betas=(0.9, 0.999))
+        opt = torch.optim.SGD(self.model.parameters(), lr=lr)
+
         scheduler = ReduceLROnPlateau(
             opt, mode="max", factor=lr_factor, patience=lr_patience, verbose=verbose
         )
@@ -185,28 +183,28 @@ class Mine(nn.Module):
             self.train()
             for inds in rand_perm.split(batch_size, dim=0):
                 with torch.set_grad_enabled(True):
-                    train_loss, _ = self.forward(Xtrain[inds, :], Ytrain[inds, :])
+                    opt.zero_grad()
+                    train_loss, _ = self.model(Xtrain[inds, :], Ytrain[inds, :])
                     train_loss.backward()
                     opt.step()
-                    opt.zero_grad()
 
             # validate and testing
             torch.set_grad_enabled(False)
             self.eval()
             with torch.no_grad():
                 # validate
-                val_loss, val_mi = self.forward(Xval, Yval)
+                val_loss, val_mi = self.model(Xval, Yval)
                 val_ema_loss = val_loss_ema_smooth(val_loss)
                 val_ema_loss_epoch.append(val_ema_loss.item())
                 val_loss_epoch.append(val_loss.item())
                 val_mi_epoch.append(val_mi.item())
 
                 # testing
-                _, test_mi = self.forward(X, Y)
+                _, test_mi = self.model(X, Y)
                 test_mi_epoch.append(test_mi.item())
 
                 # learning rate scheduler
-                # scheduler.step(val_ema_loss)
+                scheduler.step(val_ema_loss)
                 # early stopping
                 early_stopping(val_ema_loss)
 

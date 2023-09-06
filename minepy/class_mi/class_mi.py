@@ -84,12 +84,15 @@ class ClassMiModel(nn.Module):
         weight_decay=5e-5,
         verbose=False,
     ):
-        opt = torch.optim.Adam(
-            self.net.parameters(),
-            lr=lr,
-            weight_decay=weight_decay,
-            betas=(0.9, 0.999),
-        )
+        # opt = torch.optim.Adam(
+        #     self.net.parameters(),
+        #     lr=lr,
+        #     weight_decay=weight_decay,
+        #     betas=(0.9, 0.999)
+        # )
+
+        opt = torch.optim.SGD(self.net.parameters(), lr=lr, weight_decay=weight_decay)
+
         scheduler = ReduceLROnPlateau(
             opt, mode="min", factor=lr_factor, patience=lr_patience, verbose=verbose
         )
@@ -101,7 +104,7 @@ class ClassMiModel(nn.Module):
         val_loss_ema_smooth = ExpMovingAverageSmooth()
 
         self.loss_fn = nn.CrossEntropyLoss()
-        val_loss_epoch, val_dkl_epoch = [], []
+        val_loss_epoch, val_loss_smooth_epoch, val_dkl_epoch = [], [], []
 
         for i in tqdm(range(max_epochs), disable=not verbose):
             # training
@@ -120,15 +123,16 @@ class ClassMiModel(nn.Module):
             # validate and testing
             self.eval()
             with torch.set_grad_enabled(False):
-                dkl, loss = self.calc_mi_fn(val_samples, val_labels)
+                dkl, val_loss = self.calc_mi_fn(val_samples, val_labels)
                 val_dkl_epoch.append(dkl.item())
-                # val_loss = loss
-                val_loss = val_loss_ema_smooth(loss)
                 val_loss_epoch.append(val_loss.item())
+                # val_loss = loss
+                val_loss_smooth = val_loss_ema_smooth(val_loss)
+                val_loss_smooth_epoch.append(val_loss_smooth.item())
                 # learning rate scheduler
                 scheduler.step(val_loss)
                 # early stopping
-                early_stopping(val_loss)
+                early_stopping(val_loss_smooth)
 
             if early_stopping.early_stop:
                 break
