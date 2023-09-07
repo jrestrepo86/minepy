@@ -84,14 +84,11 @@ class ClassMiModel(nn.Module):
         weight_decay=5e-5,
         verbose=False,
     ):
-        # opt = torch.optim.Adam(
-        #     self.net.parameters(),
-        #     lr=lr,
-        #     weight_decay=weight_decay,
-        #     betas=(0.9, 0.999)
-        # )
+        opt = torch.optim.Adam(
+            self.net.parameters(), lr=lr, weight_decay=weight_decay, betas=(0.9, 0.999)
+        )
 
-        opt = torch.optim.SGD(self.net.parameters(), lr=lr, weight_decay=weight_decay)
+        # opt = torch.optim.SGD(self.net.parameters(), lr=lr, weight_decay=weight_decay)
 
         scheduler = ReduceLROnPlateau(
             opt, mode="min", factor=lr_factor, patience=lr_patience, verbose=verbose

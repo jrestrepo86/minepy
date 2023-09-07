@@ -79,11 +79,11 @@ class MineModel(nn.Module):
         z_marg = z[torch.randperm(z.shape[0])]
         t = self.model(torch.cat((x, z), dim=1)).mean()
         t_marg = self.model(torch.cat((x, z_marg), dim=1))
+
         if self.loss in ["mine"]:
             second_term, self.running_mean = ema_loss(
                 t_marg, self.running_mean, self.alpha
             )
-
             mi = t - second_term
             loss = -mi
         elif self.loss in ["fdiv"]:
@@ -92,13 +92,11 @@ class MineModel(nn.Module):
             loss = -mi
         elif self.loss in ["remine"]:
             second_term = torch.logsumexp(t_marg, 0) - math.log(t_marg.shape[0])
-
             mi = t - second_term
             loss = -mi + self.regWeight * torch.pow(second_term - self.targetVal, 2)
         else:
-            second_term = torch.logsumexp(t_marg, 0) - math.log(
-                t_marg.shape[0]
-            )  # mine_biased as default
+            # mine_biased as default
+            second_term = torch.logsumexp(t_marg, 0) - math.log(t_marg.shape[0])
             mi = t - second_term
             loss = -mi
 
@@ -155,8 +153,8 @@ class Mine(nn.Module):
         stop_min_delta=0,
         verbose=False,
     ):
-        # opt = torch.optim.Adam(self.model.parameters(), lr=lr, betas=(0.9, 0.999))
-        opt = torch.optim.SGD(self.model.parameters(), lr=lr)
+        opt = torch.optim.Adam(self.model.parameters(), lr=lr, betas=(0.9, 0.999))
+        # opt = torch.optim.SGD(self.model.parameters(), lr=lr)
 
         scheduler = ReduceLROnPlateau(
             opt, mode="max", factor=lr_factor, patience=lr_patience, verbose=verbose
@@ -189,24 +187,23 @@ class Mine(nn.Module):
                     opt.step()
 
             # validate and testing
-            torch.set_grad_enabled(False)
             self.eval()
-            with torch.no_grad():
+            with torch.set_grad_enabled(False):
                 # validate
                 val_loss, val_mi = self.model(Xval, Yval)
+                val_loss_epoch.append(val_loss.item())
                 val_ema_loss = val_loss_ema_smooth(val_loss)
                 val_ema_loss_epoch.append(val_ema_loss.item())
-                val_loss_epoch.append(val_loss.item())
                 val_mi_epoch.append(val_mi.item())
+                # learning rate scheduler
+                # scheduler.step(val_loss)
+                scheduler.step(val_ema_loss)
+                # early stopping
+                early_stopping(val_ema_loss)
 
                 # testing
                 _, test_mi = self.model(X, Y)
                 test_mi_epoch.append(test_mi.item())
-
-                # learning rate scheduler
-                scheduler.step(val_ema_loss)
-                # early stopping
-                early_stopping(val_ema_loss)
 
             if early_stopping.early_stop:
                 break
