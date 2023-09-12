@@ -25,7 +25,7 @@ pip install -e .
 
 ## Usage
 
-1. [Mutual information neural estimation](tests/test_mine/README.md)
+1. [Mutual information neural estimation MINE module](minepy/mine/README.md)
 2. [Classification mutual information](tests/test_class_mi/README.md)
 
 ## Bibliography

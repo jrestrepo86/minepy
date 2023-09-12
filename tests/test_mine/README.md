@@ -1,6 +1,6 @@
 # Minepy
 
-Mutual information neural estimation MINE module
+[Mutual information neural estimation MINE module](../../minepy/mine/README.md)
 
 ## MINE
 
@@ -21,9 +21,9 @@ def plot(ax, Rho, teo_mi, mi, label):
 loss1 = "mine_biased"
 loss2 = "mine"
 loss3 = "remine"
-input_dim = 2
-model_params = {"hidden_dim": 50, "afn": "elu", "num_hidden_layers": 3}
+model_params = {"hidden_dim": 50, "num_hidden_layers": 3, "afn": "elu"}
 
+N = 3000
 mu = np.array([0, 0])
 Rho = np.linspace(-0.99, 0.99, 21)
 mi_teo = np.zeros(*Rho.shape)
@@ -32,17 +32,17 @@ mi_mine = np.zeros(*mi_teo.shape)
 mi_remine = np.zeros(*mi_teo.shape)
 
 # Training
-batch_size = 300
-max_epochs = 3000
+batch_size = "full"
+max_epochs = 100000
 train_params = {
     "batch_size": batch_size,
     "max_epochs": max_epochs,
     "val_size": 0.2,
-    "lr": 1e-3,
-    "lr_factor": 0.1,
-    "lr_patience": 10,
-    "stop_patience": 100,
-    "stop_min_delta": 0.01,
+    "lr": 1e-1,
+    "lr_factor": 0.5,
+    "lr_patience": 100,
+    "stop_patience": 300,
+    "stop_min_delta": 0.0,
     "verbose": False,
 }
 
@@ -50,24 +50,24 @@ for i, rho in enumerate(tqdm(Rho)):
     # Generate data
     cov_matrix = np.array([[1, rho], [rho, 1]])
     joint_samples_train = np.random.multivariate_normal(
-        mean=mu, cov=cov_matrix, size=(10000, 1)
+        mean=mu, cov=cov_matrix, size=(N, 1)
     )
     X = np.squeeze(joint_samples_train[:, :, 0])
-    Z = np.squeeze(joint_samples_train[:, :, 1])
+    Y = np.squeeze(joint_samples_train[:, :, 1])
 
     # Teoric value
     mi_teo[i] = -0.5 * np.log(1 - rho**2)
     # models
-    model_biased = Mine(input_dim, loss=loss1, **model_params)
-    model_mine = Mine(input_dim, loss=loss2, alpha=0.01, **model_params)
+    model_biased = Mine(X, Y, loss=loss1, **model_params)
+    model_mine = Mine(X, Y, loss=loss2, alpha=0.01, **model_params)
     model_remine = Mine(
-        input_dim, loss=loss3, regWeight=0.1, targetVal=0, **model_params
+        X, Y, loss=loss3, regWeight=0.1, targetVal=0, **model_params
     )
 
     # Train models
-    model_biased.fit(X, Z, **train_params)
-    model_mine.fit(X, Z, **train_params)
-    model_remine.fit(X, Z, **train_params)
+    model_biased.fit(**train_params)
+    model_mine.fit(**train_params)
+    model_remine.fit(**train_params)
 
     # Get mi estimation
     mi_mine_biased[i] = model_biased.get_mi()
@@ -80,9 +80,9 @@ plot(axs[0], Rho, mi_teo, mi_mine_biased, label=loss1)
 plot(axs[1], Rho, mi_teo, mi_mine, label=loss2)
 plot(axs[2], Rho, mi_teo, mi_remine, label=loss3)
 axs[0].set_xlabel("rho")
+axs[0].set_ylabel("mi")
 axs[1].set_xlabel("rho")
 axs[2].set_xlabel("rho")
-axs[0].set_ylabel("mi")
 fig.suptitle("Mutual information neural estimation", fontsize=13)
 plt.show()
 ```

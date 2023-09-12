@@ -37,12 +37,11 @@ def testMine():
         "batch_size": batch_size,
         "max_epochs": max_epochs,
         "val_size": 0.2,
-        "lr": 1e-1,
-        # "lr": 1e-3,
+        "lr": 1e-3,
         "lr_factor": 0.5,
         "lr_patience": 100,
         "stop_patience": 300,
-        "stop_min_delta": 0.00,
+        "stop_min_delta": 0.0,
         "verbose": False,
     }
 
