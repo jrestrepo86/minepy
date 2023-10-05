@@ -40,6 +40,11 @@ pip install -e .
   year={2018},
   organization={PMLR}
 }
+@article{choi2020regularized,
+  title={Regularized mutual information neural estimation},
+  author={Choi, Kwanghee and Lee, Siyeong},
+  year={2020}
+}
 inproceedings{choi2022combating, 
     title={Combating the instability of mutual information-based losses via regularization},
     author={Choi, Kwanghee and Lee, Siyeong}, 
