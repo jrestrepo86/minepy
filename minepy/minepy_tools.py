@@ -54,6 +54,7 @@ def get_activation_fn(afn):
         "softsign": nn.Softsign,
         "tanhshrink": nn.Tanhshrink,
         "softmax": nn.Softmax,
+        "gelu": nn.GELU,
     }
 
     if afn not in activation_functions:
