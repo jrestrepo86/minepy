@@ -29,16 +29,19 @@ EPS = 1e-10
 
 
 class ClassMiModel(nn.Module):
-    def __init__(
-        self, input_dim, hidden_dim=50, num_hidden_layers=2, afn="elu", device=None
-    ):
+    def __init__(self, input_dim, hidden_layers=[64, 32], afn="elu", device=None):
         super().__init__()
 
+        hidden_layers = [int(x) for x in hidden_layers]
+
         activation_fn = get_activation_fn(afn)
-        seq = [nn.Linear(input_dim, hidden_dim), activation_fn()]
-        for _ in range(num_hidden_layers):
-            seq += [nn.Linear(hidden_dim, hidden_dim), activation_fn()]
-        seq += [nn.Linear(hidden_dim, 2)]
+        seq = [nn.Linear(input_dim, hidden_layers[0]), activation_fn()]
+        for i in range(len(hidden_layers) - 1):
+            seq += [
+                nn.Linear(hidden_layers[i], hidden_layers[i + 1]),
+                activation_fn(),
+            ]
+        seq += [nn.Linear(hidden_layers[-1], 2)]
         self.net = nn.Sequential(*seq).to(device)
         self.softm = nn.Softmax(dim=1)
 
@@ -143,9 +146,7 @@ class ClassMiModel(nn.Module):
 
 
 class ClassMI(nn.Module):
-    def __init__(
-        self, X, Y, hidden_dim=50, num_hidden_layers=2, afn="elu", device=None
-    ):
+    def __init__(self, X, Y, hidden_layers=[64, 32], afn="elu", device=None):
         super().__init__()
         # select device
         if device is None:
@@ -162,8 +163,7 @@ class ClassMI(nn.Module):
         # setup model
         self.model = ClassMiModel(
             input_dim=self.dx + self.dy,
-            hidden_dim=hidden_dim,
-            num_hidden_layers=num_hidden_layers,
+            hidden_layers=hidden_layers,
             afn=afn,
             device=self.device,
         )

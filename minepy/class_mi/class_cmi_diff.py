@@ -21,9 +21,7 @@ EPS = 1e-6
 
 
 class ClassCMIDiff(nn.Module):
-    def __init__(
-        self, X, Y, Z, hidden_dim=50, num_hidden_layers=2, afn="elu", device=None
-    ):
+    def __init__(self, X, Y, Z, hidden_layers=[64, 32], afn="elu", device=None):
         super().__init__()
         # select device
         if device is None:
@@ -41,16 +39,14 @@ class ClassCMIDiff(nn.Module):
         # model for I(X,Y,Z)
         self.model_xyz = ClassMiModel(
             input_dim=dx + dy + dz,
-            hidden_dim=hidden_dim,
-            num_hidden_layers=num_hidden_layers,
+            hidden_layers=hidden_layers,
             afn=afn,
             device=self.device,
         )
         # model for I(X,Z)
         self.model_xz = ClassMiModel(
             input_dim=dx + dz,
-            hidden_dim=hidden_dim,
-            num_hidden_layers=num_hidden_layers,
+            hidden_layers=hidden_layers,
             afn=afn,
             device=self.device,
         )

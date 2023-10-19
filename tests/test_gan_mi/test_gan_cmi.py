@@ -5,15 +5,15 @@ import numpy as np
 from matplotlib import pyplot as plt
 from tqdm import tqdm
 
-from minepy.gan_mi.gan_cmi import ClassCMiGan
+from minepy.gan_mi.gan_cmi import GanCMI
 
-# DATA_PATH = "./data_cmigan/catNon-lin-NI_3/"
-DATA_PATH = "./data_cmigan"
+DATA_PATH = "./data_cmigan/catNon-lin-NI_3/"
+# DATA_PATH = "./data_cmigan"
 
 
 def cmiLinear():
-    data = np.load(f"{DATA_PATH}/data.20k.dz100.seed0.npy")
-    cmi_teo = np.load(f"{DATA_PATH}/ksg_gt.dz100.npy")[0]
+    data = np.load(f"{DATA_PATH}/data.20k.dz10.seed0.npy")
+    cmi_teo = np.load(f"{DATA_PATH}/ksg_gt.dz10.npy")[0]
 
     x = data[:, 0]
     y = data[:, 1]
@@ -21,8 +21,9 @@ def cmiLinear():
 
     print(data.shape)
 
-    max_epochs = 16000
-    batch_size = x.shape[0]
+    # Net parameters
+    max_epochs = 7000
+    batch_size = "full"
     noise_dim = 80
     dz = z.shape[1]
     gdim = noise_dim + dz
@@ -34,7 +35,8 @@ def cmiLinear():
         "r_hidden_layers": [gdim / 2, gdim / 4, gdim / 8],
         "r_afn": "gelu",
     }
-    trainin_params = {
+    # Training
+    training_params = {
         "batch_size": batch_size,
         "max_epochs": max_epochs,
         "lr": 1e-4,
@@ -46,8 +48,8 @@ def cmiLinear():
         "verbose": True,
     }
 
-    class_cmigan_model = ClassCMiGan(x, y, z, **model_params)
-    class_cmigan_model.fit(**trainin_params)
+    class_cmigan_model = GanCMI(x, y, z, **model_params)
+    class_cmigan_model.fit(**training_params)
 
     cmi = class_cmigan_model.get_cmi()
     (
