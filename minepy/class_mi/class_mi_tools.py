@@ -58,7 +58,7 @@ class class_mi_data_loader:
     def split_train_val(self, val_size, device):
         n = self.samples.shape[0]
         # send data top device
-        samples = torch.from_numpy(self.samples)
+        samples = torch.from_numpy(self.samples.astype(np.float32))
         labels = torch.from_numpy(self.labels)
 
         # mix samples
@@ -144,55 +144,56 @@ class class_cmi_diff_data_loader:
 
 
 class class_cmi_gen_data_loader:
-    def __init__(self, X, Y, Z, val_size=0.2, k=1, device="cuda"):
-        self.set_joint_marginals(X, Y, Z, k)
+    def __init__(self, X, Y, Z, val_size=0.2, device="cuda"):
+        self.set_joint_marginals(X, Y, Z)
         self.split_train_val(val_size, device)
 
-    def set_joint_marginals(self, X, Y, Z, k):
-        n = X.shape[0]
-
-        # rand permute
-        inds = torch.randperm(n)
-        X, Y, Z = X[inds, :], Y[inds, :], Z[inds, :]
-        # set joint
-        # p(x,y,z)
-        data_joint = np.hstack((X, Y, Z))
-
-        # split data for the classifier and the generator
-        m = np.ceil(n / k).astype(int)
-        (class_idx, gen_idx) = (inds[:m], inds[m:])
-        Z_class, Z_gen = Z[class_idx, :], Z[gen_idx, :]
-        Y_gen = Y[gen_idx, :]
-
-        # set marginals - Gerate y|z samples (knn)
-        # algorithm{‘auto’, ‘ball_tree’, ‘kd_tree’, ‘brute’},
-        # nbrs = NearestNeighbors(n_neighbors=k, algorithm="kd_tree").fit(Z_gen)
+    def knn_search(self, Zclass, Zgen):
+        # knn
         nbrs = NearestNeighbors(
-            n_neighbors=k,
-            algorithm="kd_tree",
+            n_neighbors=1,
+            algorithm="kd_tree",  # algorithm{‘auto’, ‘ball_tree’, ‘kd_tree’, ‘brute’}
             metric="euclidean",
-        ).fit(Z_gen)
-        nn_indx = nbrs.kneighbors(Z_class, return_distance=False).flatten()
-        class_idx = torch.repeat_interleave(class_idx, k)
-        # p(x,z)p(y|z)
-        data_marg = np.hstack((X[class_idx, :], Y_gen[nn_indx, :], Z[class_idx, :]))
+        ).fit(Zgen)
+        nn_idx = nbrs.kneighbors(Zclass, return_distance=False).flatten()
+        return nn_idx
 
-        self.samples = np.vstack((data_joint, data_marg))
-        self.labels = np.squeeze(
-            np.vstack(
-                (np.ones((data_joint.shape[0], 1)), np.zeros((data_marg.shape[0], 1)))
-            )
-        )
+    def set_joint_marginals(self, X, Y, Z):
+        # set joint p(x,y,z)
+        data_joint = np.hstack((X, Y, Z))
+        # set marginals - Gerate y|z samples (knn)
+        # split data for the classifier and the generator (knn)
+        n = X.shape[0]
+        rand_perm = np.random.permutation(n)
+        data_marg = np.array([]).reshape(0, X.shape[1] + Y.shape[1] + Z.shape[1])
+        for inds in np.split(rand_perm, 2, axis=0):
+            mask = np.ones(n, dtype=bool)
+            mask[inds] = False
+            class_idx, gen_idx = mask, np.logical_not(mask)
+            Ygen = Y[class_idx, :]
+            Zclass, Zgen = Z[class_idx, :], Z[gen_idx, :]
+            nn_idx = self.knn_search(Zclass, Zgen)
+            # p(x,z)p(y|z)
+            temp = np.hstack((X[class_idx, :], Ygen[nn_idx, :], Z[class_idx, :]))
+            data_marg = np.vstack((data_marg, temp))
+
+        # set samples
+        samples = np.vstack((data_joint, data_marg))
+        # set labels
+        joint_labels = np.hstack((np.ones((n, 1)), np.zeros((n, 1))))
+        marg_labels = np.hstack((np.zeros((n, 1)), np.ones((n, 1))))
+        labels = np.squeeze(np.vstack((joint_labels, marg_labels)))
+        self.samples = samples
+        self.labels = labels
 
     def split_train_val(self, val_size, device):
         n = self.samples.shape[0]
         # send data top device
-        samples = torch.from_numpy(self.samples)
+        samples = torch.from_numpy(self.samples.astype(np.float32))
         labels = torch.from_numpy(self.labels)
-
         # split data in training and validation sets
-        val_size = int(val_size * n)
         inds = torch.randperm(n)
+        val_size = int(val_size * n)
         (val_idx, train_idx) = (inds[:val_size], inds[val_size:])
 
         self.samples = samples.to(device)

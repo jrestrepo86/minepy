@@ -20,7 +20,7 @@ from minepy.minepy_tools import EarlyStopping, toColVector
 EPS = 1e-6
 
 
-class ClassCMIDiff(nn.Module):
+class ClassDiffCMI(nn.Module):
     def __init__(self, X, Y, Z, hidden_layers=[64, 32], afn="elu", device=None):
         super().__init__()
         # select device

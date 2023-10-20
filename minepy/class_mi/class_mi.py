@@ -18,7 +18,8 @@ import math
 import numpy as np
 import torch
 import torch.nn as nn
-from torch.optim.lr_scheduler import ReduceLROnPlateau
+from torch.optim.lr_scheduler import (CosineAnnealingWarmRestarts, CyclicLR,
+                                      OneCycleLR, ReduceLROnPlateau)
 from tqdm import tqdm
 
 from minepy.class_mi.class_mi_tools import batch, class_mi_data_loader
@@ -38,6 +39,7 @@ class ClassMiModel(nn.Module):
         seq = [nn.Linear(input_dim, hidden_layers[0]), activation_fn()]
         for i in range(len(hidden_layers) - 1):
             seq += [
+                nn.Dropout(0.2),
                 nn.Linear(hidden_layers[i], hidden_layers[i + 1]),
                 activation_fn(),
             ]
@@ -80,23 +82,15 @@ class ClassMiModel(nn.Module):
         batch_size=64,
         max_epochs=2000,
         lr=1e-4,
-        lr_factor=0.1,
-        lr_patience=10,
         stop_patience=100,
         stop_min_delta=0,
         weight_decay=5e-5,
         verbose=False,
     ):
-        opt = torch.optim.Adam(
-            self.net.parameters(), lr=lr, weight_decay=weight_decay, betas=(0.9, 0.999)
+        opt = torch.optim.RMSprop(
+            self.net.parameters(), lr=lr, weight_decay=weight_decay
         )
-
-        # opt = torch.optim.SGD(self.net.parameters(), lr=lr, weight_decay=weight_decay)
-
-        scheduler = ReduceLROnPlateau(
-            opt, mode="min", factor=lr_factor, patience=lr_patience, verbose=verbose
-        )
-
+        scheduler = CyclicLR(opt, base_lr=1e-6, max_lr=1e-3, mode="triangular2")
         early_stopping = EarlyStopping(
             patience=stop_patience, delta=int(stop_min_delta)
         )
@@ -120,17 +114,18 @@ class ClassMiModel(nn.Module):
                     loss.backward()
                     opt.step()
 
-            # validate and testing
+            # validation
             self.eval()
             with torch.set_grad_enabled(False):
-                dkl, val_loss = self.calc_mi_fn(val_samples, val_labels)
-                val_dkl_epoch.append(dkl.item())
+                # validation set
+                val_dkl, val_loss = self.calc_mi_fn(val_samples, val_labels)
+                val_dkl_epoch.append(val_dkl.item())
                 val_loss_epoch.append(val_loss.item())
-                # val_loss = loss
                 val_loss_smooth = val_loss_ema_smooth(val_loss)
                 val_loss_smooth_epoch.append(val_loss_smooth.item())
+
                 # learning rate scheduler
-                scheduler.step(val_loss)
+                scheduler.step()
                 # early stopping
                 early_stopping(val_loss_smooth)
 
@@ -209,14 +204,8 @@ class ClassMI(nn.Module):
             **fit_params
         )
 
-    def get_mi(self, all=False):
-        ind_min_loss = np.argmin(self.val_loss_epoch)
-        mi_val_loss = self.val_dkl_epoch[ind_min_loss]
-        mi_dkl_max = self.val_dkl_epoch.max()
-        if all:
-            return mi_dkl_max, mi_val_loss, self.fepoch
-        else:
-            return mi_val_loss
+    def get_mi(self):
+        return self.val_dkl_epoch.max()
 
     def get_curves(self):
         return (

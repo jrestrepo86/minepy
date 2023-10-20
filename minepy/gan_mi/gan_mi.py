@@ -11,7 +11,7 @@ import math
 import numpy as np
 import torch
 import torch.nn as nn
-from torch.optim.lr_scheduler import StepLR
+from torch.optim.lr_scheduler import ReduceLROnPlateau, StepLR
 from tqdm import tqdm
 
 from minepy.minepy_tools import (EarlyStopping, ExpMovingAverageSmooth,
@@ -136,9 +136,22 @@ class GanMI(nn.Module):
         # reg_scheduler = StepLR(reg_opt, step_size=lr_patience, gamma=lr_factor)
         # gen_scheduler = StepLR(gen_opt, step_size=lr_patience, gamma=lr_factor)
 
+        gen_scheduler = ReduceLROnPlateau(
+            gen_opt, mode="min", factor=lr_factor, patience=lr_patience, verbose=verbose
+        )
+        reg_scheduler = ReduceLROnPlateau(
+            reg_opt, mode="min", factor=lr_factor, patience=lr_patience, verbose=verbose
+        )
+        early_stopping = EarlyStopping(
+            patience=stop_patience, delta=int(stop_min_delta)
+        )
+
+        reg_loss_ema_smooth = ExpMovingAverageSmooth()
+
         mi_epoch = []
         gen_loss_epoch = []
         reg_loss_epoch = []
+        reg_loss_smooth_epoch = []
         # training
         self.train()
         for _ in tqdm(range(max_epochs), disable=not verbose):
@@ -192,10 +205,23 @@ class GanMI(nn.Module):
                 reg_join_out = self.model.regresor_forward(joint_samples)
                 reg_marg_out = self.model.regresor_forward(marg_samples)
                 reg_loss = self.regresor_loss(reg_join_out, reg_marg_out)
-                mi_epoch.append(-reg_loss.item())
+                # learning rate scheduler
+                gen_scheduler.step(reg_loss)
+                reg_scheduler.step(reg_loss)
+                # smooth reg loss
+                reg_loss_smooth = reg_loss_ema_smooth(reg_loss)
+                reg_loss_smooth_epoch.append(reg_loss_smooth.item())
+                # early_stopping
+                early_stopping(reg_loss_smooth)
+
+            mi_epoch.append(-reg_loss.item())
+            if early_stopping.early_stop:
+                break
+
         self.mi_epoch = np.array(mi_epoch)
         self.gen_loss_epoch = np.array(gen_loss_epoch)
         self.reg_loss_epoch = np.array(reg_loss_epoch)
+        self.reg_loss_smooth_epoch = np.array(reg_loss_smooth_epoch)
 
     def get_mi(self):
         return self.mi_epoch[-1000:].mean()
@@ -205,4 +231,5 @@ class GanMI(nn.Module):
             self.mi_epoch,
             self.gen_loss_epoch,
             self.reg_loss_epoch,
+            self.reg_loss_smooth_epoch,
         )

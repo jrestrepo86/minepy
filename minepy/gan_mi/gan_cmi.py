@@ -16,7 +16,7 @@ from tqdm import tqdm
 
 from minepy.gan_mi.gan_mi import CGanModel
 from minepy.minepy_tools import (EarlyStopping, ExpMovingAverageSmooth,
-                                 get_activation_fn, toColVector)
+                                 toColVector)
 
 
 class GanCMI(nn.Module):
@@ -78,8 +78,8 @@ class GanCMI(nn.Module):
         lr=1e-4,
         lr_factor=0.1,
         lr_patience=10,
-        stop_patience=100,
-        stop_min_delta=0.05,
+        stop_patience=1000,
+        stop_min_delta=0.005,
         weight_decay=5e-5,
         verbose=False,
     ):
@@ -93,10 +93,17 @@ class GanCMI(nn.Module):
         # reg_scheduler = StepLR(reg_opt, step_size=lr_patience, gamma=lr_factor)
         # gen_scheduler = StepLR(gen_opt, step_size=lr_patience, gamma=lr_factor)
 
+        early_stopping = EarlyStopping(
+            patience=stop_patience, delta=int(stop_min_delta)
+        )
+
+        reg_loss_ema_smooth = ExpMovingAverageSmooth()
+
         cmi_epoch = []
         gen_loss_epoch = []
         reg_loss_epoch = []
-        reg_marg_loss_epoch = []
+        reg_loss_smooth_epoch = []
+
         # training
         self.train()
         for _ in tqdm(range(max_epochs), disable=not verbose):
@@ -123,7 +130,6 @@ class GanCMI(nn.Module):
                     reg_loss.backward()
                     reg_opt.step()
             reg_loss_epoch.append(reg_loss.item())
-            reg_marg_loss_epoch.append(self.ref_marg_loss.item())
             # train generator
             for _ in range(g_training_steps):
                 # inds = torch.randint(0, n, (batch_size,))
@@ -152,11 +158,19 @@ class GanCMI(nn.Module):
                 reg_join_out = self.model.regresor_forward(joint_samples)
                 reg_marg_out = self.model.regresor_forward(marg_samples)
                 reg_loss = self.regresor_loss(reg_join_out, reg_marg_out)
-                cmi_epoch.append(-reg_loss.item())
+                # smooth reg loss
+                reg_loss_smooth = reg_loss_ema_smooth(reg_loss)
+                reg_loss_smooth_epoch.append(reg_loss_smooth.item())
+                # early_stopping
+                early_stopping(reg_loss_smooth)
+
+            cmi_epoch.append(-reg_loss.item())
+            if early_stopping.early_stop:
+                break
         self.cmi_epoch = np.array(cmi_epoch)
         self.gen_loss_epoch = np.array(gen_loss_epoch)
         self.reg_loss_epoch = np.array(reg_loss_epoch)
-        self.reg_marg_loss_epoch = np.array(reg_marg_loss_epoch)
+        self.reg_loss_smooth_epoch = np.array(reg_loss_smooth_epoch)
 
     def get_cmi(self):
         return self.cmi_epoch[-1000:].mean()
@@ -166,5 +180,5 @@ class GanCMI(nn.Module):
             self.cmi_epoch,
             self.gen_loss_epoch,
             self.reg_loss_epoch,
-            self.reg_marg_loss_epoch,
+            self.reg_loss_smooth_epoch,
         )
