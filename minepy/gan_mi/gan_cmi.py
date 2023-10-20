@@ -27,9 +27,9 @@ class GanCMI(nn.Module):
         Z,
         noise_dim=40,
         g_hidden_layers=[64, 32],
-        g_afn="relu",
+        g_afn="gelu",
         r_hidden_layers=[32, 16],
-        r_afn="relu",
+        r_afn="gelu",
         device=None,
     ):
         super().__init__()
@@ -72,15 +72,12 @@ class GanCMI(nn.Module):
         self,
         batch_size=64,
         max_epochs=2000,
-        r_training_steps=3,
-        g_training_steps=1,
-        val_size=0.2,
         lr=1e-4,
-        lr_factor=0.1,
-        lr_patience=10,
-        stop_patience=1000,
-        stop_min_delta=0.005,
         weight_decay=5e-5,
+        stop_patience=1000,
+        stop_min_delta=0.0,
+        r_training_steps=5,
+        g_training_steps=1,
         verbose=False,
     ):
         gen_opt = torch.optim.RMSprop(

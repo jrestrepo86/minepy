@@ -45,11 +45,11 @@ class ClassGenCMI(nn.Module):
         self,
         batch_size=64,
         max_epochs=2000,
-        val_size=0.2,
         lr=1e-4,
-        stop_patience=100,
-        stop_min_delta=0.05,
         weight_decay=5e-5,
+        stop_patience=1000,
+        stop_min_delta=0.0,
+        val_size=0.2,
         verbose=False,
     ):
         fit_params = {
