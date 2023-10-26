@@ -24,6 +24,7 @@ setup(
         "torch_vision",
         "pytorch_lightning",
         "scikit_learn",
+        "seaborn",
         "tqdm",
         "numpy",
         "matplotlib",

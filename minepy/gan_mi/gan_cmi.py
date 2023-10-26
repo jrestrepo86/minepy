@@ -11,7 +11,7 @@ import math
 import numpy as np
 import torch
 import torch.nn as nn
-from torch.optim.lr_scheduler import StepLR
+from torch.optim.lr_scheduler import CyclicLR
 from tqdm import tqdm
 
 from minepy.gan_mi.gan_mi import CGanModel
@@ -87,8 +87,12 @@ class GanCMI(nn.Module):
             self.model.regresor.parameters(), lr=lr, weight_decay=weight_decay
         )
 
-        # reg_scheduler = StepLR(reg_opt, step_size=lr_patience, gamma=lr_factor)
-        # gen_scheduler = StepLR(gen_opt, step_size=lr_patience, gamma=lr_factor)
+        gen_scheduler = CyclicLR(
+            gen_opt, base_lr=lr, max_lr=1e-3, mode="triangular2", step_size_up=1000
+        )
+        reg_scheduler = CyclicLR(
+            reg_opt, base_lr=lr, max_lr=1e-3, mode="triangular2", step_size_up=1000
+        )
 
         early_stopping = EarlyStopping(
             patience=stop_patience, delta=int(stop_min_delta)
@@ -162,6 +166,8 @@ class GanCMI(nn.Module):
                 early_stopping(reg_loss_smooth)
 
             cmi_epoch.append(-reg_loss.item())
+            gen_scheduler.step()
+            reg_scheduler.step()
             if early_stopping.early_stop:
                 break
         self.cmi_epoch = np.array(cmi_epoch)
@@ -170,7 +176,7 @@ class GanCMI(nn.Module):
         self.reg_loss_smooth_epoch = np.array(reg_loss_smooth_epoch)
 
     def get_cmi(self):
-        return self.cmi_epoch[-1000:].mean()
+        return -self.reg_loss_smooth_epoch.mean()
 
     def get_curves(self):
         return (

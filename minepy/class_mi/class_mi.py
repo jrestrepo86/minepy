@@ -18,11 +18,10 @@ import math
 import numpy as np
 import torch
 import torch.nn as nn
-from torch.optim.lr_scheduler import (CosineAnnealingWarmRestarts, CyclicLR,
-                                      OneCycleLR, ReduceLROnPlateau)
+from torch.optim.lr_scheduler import CyclicLR
 from tqdm import tqdm
 
-from minepy.class_mi.class_mi_tools import batch, class_mi_data_loader
+from minepy.class_mi.class_mi_tools import class_mi_data_loader
 from minepy.minepy_tools import (EarlyStopping, ExpMovingAverageSmooth,
                                  get_activation_fn, toColVector)
 
@@ -30,7 +29,7 @@ EPS = 1e-10
 
 
 class ClassMiModel(nn.Module):
-    def __init__(self, input_dim, hidden_layers=[64, 32], afn="elu", device=None):
+    def __init__(self, input_dim, hidden_layers=[64, 32], afn="gelu", device=None):
         super().__init__()
 
         hidden_layers = [int(x) for x in hidden_layers]
@@ -82,15 +81,15 @@ class ClassMiModel(nn.Module):
         batch_size=64,
         max_epochs=2000,
         lr=1e-4,
+        weight_decay=5e-5,
         stop_patience=100,
         stop_min_delta=0,
-        weight_decay=5e-5,
         verbose=False,
     ):
         opt = torch.optim.RMSprop(
             self.net.parameters(), lr=lr, weight_decay=weight_decay
         )
-        scheduler = CyclicLR(opt, base_lr=1e-6, max_lr=1e-3, mode="triangular2")
+        scheduler = CyclicLR(opt, base_lr=lr, max_lr=1e-3, mode="triangular2")
         early_stopping = EarlyStopping(
             patience=stop_patience, delta=int(stop_min_delta)
         )
@@ -167,24 +166,20 @@ class ClassMI(nn.Module):
         self,
         batch_size=64,
         max_epochs=2000,
-        val_size=0.2,
         lr=1e-4,
-        lr_factor=0.1,
-        lr_patience=10,
+        weight_decay=5e-5,
         stop_patience=100,
         stop_min_delta=0.05,
-        weight_decay=5e-5,
+        val_size=0.2,
         verbose=False,
     ):
         fit_params = {
             "batch_size": batch_size,
             "max_epochs": max_epochs,
             "lr": lr,
-            "lr_factor": lr_factor,
-            "lr_patience": lr_patience,
+            "weight_decay": weight_decay,
             "stop_patience": stop_patience,
             "stop_min_delta": stop_min_delta,
-            "weight_decay": weight_decay,
             "verbose": verbose,
         }
 

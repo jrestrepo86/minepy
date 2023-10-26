@@ -1,11 +1,13 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
+import random
+
 import numpy as np
 import pandas as pd
+import ray
 import seaborn as sns
 from matplotlib import pyplot as plt
-from tqdm import tqdm
 
 from minepy.class_mi.class_gen_cmi import ClassGenCMI
 
@@ -21,6 +23,40 @@ FILES = {
     },
 }
 
+NREA = 5  # number of realizations
+MAX_ACTORS = 5  # number of nodes
+
+# model parameters
+afn = "gelu"
+
+# Training
+training_params = {
+    "batch_size": "full",
+    "max_epochs": 8000,
+    "lr": 1e-6,
+    "stop_patience": 1000,
+    "stop_min_delta": 0.00,
+}
+
+
+@ray.remote
+class Progress:
+    def __init__(self, max_it=1):
+        self.max_it = max_it
+        self.count = 0
+
+    def update(self):
+        self.count += 1
+        print(f"progress: {100* self.count/self.max_it:.2f}%")
+
+
+@ray.remote(num_gpus=1 / MAX_ACTORS, max_calls=1)
+def model_training(x, y, z, model_params, sim, progress):
+    model = ClassGenCMI(x, y, z, **model_params)
+    model.fit(**training_params)
+    progress.update.remote()
+    return (sim, model.get_cmi())
+
 
 def read_data(key):
     data = np.load(f"{DATA_PATH}/{FILES[key]['data']}")
@@ -32,53 +68,52 @@ def read_data(key):
     return x, y, z, true_cmi[0]
 
 
-def get_cmi(x, y, z, model_params, training_params):
-    cmi = []
-    for i in range(10):
-        print(i + 1)
-        class_cmigen_model = ClassGenCMI(x, y, z, **model_params)
-        class_cmigen_model.fit(**training_params, verbose=False)
-        cmi.append(class_cmigen_model.get_cmi())
-    return cmi
-
-
 def cmiTest01():
     print("Test 01/02")
-    # data
-    data_keys = FILES.keys()
-
-    # model parameters
-    max_epochs = 20000
-    batch_size = "full"
-
-    # Training
-    training_params = {
-        "batch_size": batch_size,
-        "max_epochs": max_epochs,
-        "knn": 1,
-        "lr": 1e-4,
-        "lr_factor": 0.5,
-        "lr_patience": 1000,
-        "stop_patience": 4000,
-        "stop_min_delta": 0.00,
-        "weight_decay": 1e-5,
-    }
+    sims = FILES.keys()
     results = []
-    for key in data_keys:
-        print(key)
-        x, y, z, true_cmi = read_data(key)
-        # Net parameters
+    sims_params = []
+    # Simulations
+    for sim in sims:
+        # data
+        x, y, z, true_cmi = read_data(sim)
+        results += [(sim, "true value", true_cmi)]
+        x_id = ray.put(x)
+        y_id = ray.put(y)
+        z_id = ray.put(z)
         gdim = 2 + z.shape[1]
-        model_params = {
-            "hidden_layers": [gdim, gdim / 2, gdim / 4],
-            "afn": "gelu",
-        }
-        cmi = get_cmi(x, y, z, model_params, training_params)
-        temp = [(key, true_cmi, "true value")]
-        temp += [(key, x, "ccmi-gen") for x in cmi]
-        temp = pd.DataFrame(temp, columns=["sim", "cmi", "method"])
-        results.append(temp)
-    results = pd.concat(results, ignore_index=True)
+        for _ in range(NREA):
+            sim_params_ = {
+                "x": x_id,
+                "y": y_id,
+                "z": z_id,
+                "sim": sim,
+                "model_params": {
+                    "hidden_layers": [gdim / 2, gdim / 4, gdim / 8],
+                    "afn": afn,
+                },
+            }
+            sims_params.append(sim_params_)
+
+    progress = Progress.remote(len(sims_params))
+    random.shuffle(sims_params)
+    res = ray.get(
+        [
+            model_training.remote(
+                s["x"],
+                s["y"],
+                s["z"],
+                s["model_params"],
+                s["sim"],
+                progress,
+            )
+            for s in sims_params
+        ]
+    )
+    # parse-results
+    results += [(sim_key, "ccmi-gen", cmi) for sim_key, cmi in res]
+    results = pd.DataFrame(results, columns=["sim", "method", "cmi"])
+    # plot
     sns.catplot(data=results, x="sim", y="cmi", hue="method", kind="bar")
 
 
@@ -87,30 +122,14 @@ def cmiTest02():
     # data
     data_keys = FILES.keys()
 
-    # model parameters
-    max_epochs = 20000
-    batch_size = "full"
-
-    # Training
-    training_params = {
-        "batch_size": batch_size,
-        "max_epochs": max_epochs,
-        "knn": 1,
-        "lr": 1e-4,
-        "lr_factor": 0.5,
-        "lr_patience": 1000,
-        "stop_patience": 4000,
-        "stop_min_delta": 0.00,
-        "weight_decay": 1e-5,
-    }
     for key in data_keys:
         print(key)
         x, y, z, true_cmi = read_data(key)
-        # Net parameters
+        # model parameters
         gdim = 2 + z.shape[1]
         model_params = {
-            "hidden_layers": [gdim, gdim / 2, gdim / 4],
-            "afn": "gelu",
+            "hidden_layers": [gdim / 2, gdim / 4, gdim / 8],
+            "afn": afn,
         }
 
         class_cmigen_model = ClassGenCMI(x, y, z, **model_params)

@@ -2,7 +2,16 @@
 # -*- coding: utf-8 -*-
 """
 Classification conditional mutual information
-generator approach
+Generator approach
+
+@inproceedings{
+  title={CCMI: Classifier based conditional mutual information estimation},
+  author={Mukherjee, Sudipto and Asnani, Himanshu and Kannan, Sreeram},
+  booktitle={Uncertainty in artificial intelligence},
+  pages={1083--1093},
+  year={2020},
+  organization={PMLR}
+}
 """
 
 
@@ -18,7 +27,7 @@ EPS = 1e-6
 
 
 class ClassGenCMI(nn.Module):
-    def __init__(self, X, Y, Z, hidden_layers=[64, 32], afn="elu", device=None):
+    def __init__(self, X, Y, Z, hidden_layers=[64, 32], afn="gelu", device=None):
         super().__init__()
         # select device
         if device is None:
@@ -56,15 +65,17 @@ class ClassGenCMI(nn.Module):
             "batch_size": batch_size,
             "max_epochs": max_epochs,
             "lr": lr,
+            "weight_decay": weight_decay,
             "stop_patience": stop_patience,
             "stop_min_delta": stop_min_delta,
-            "weight_decay": weight_decay,
             "verbose": verbose,
         }
 
+        # Data loader
         self.data_loader = class_cmi_gen_data_loader(
             self.X, self.Y, self.Z, val_size=val_size, device=self.device
         )
+        # Estimate I(X,Y|Z)
         (
             self.val_dkl_epoch,
             self.val_loss_epoch,
