@@ -1,82 +1,98 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
-from sys import version
+import random
 
 import numpy as np
+import pandas as pd
+import ray
+import seaborn as sns
 from matplotlib import pyplot as plt
-from tqdm import tqdm
+from ray.experimental.tqdm_ray import tqdm
 
 from minepy.class_mi.class_mi import ClassMI
+from tests.testTools import Progress, gausianSamples
 
-N = 10000
+# from testTool import Progress, gaussianSamples
+
+
+# from tqdm.auto import tqdm
+
+
+NREA = 5  # number of realizations
+MAX_ACTORS = 5  # number of nodes
+N = 10000  # series data points
 # Net parameters
-model_params = {"hidden_layers": [32, 16, 8], "afn": "gelu"}
+model_params = {"hidden_layers": [32, 16, 8, 4], "afn": "gelu"}
 # Training
-batch_size = "full"
-max_epochs = 2000
-train_params = {
-    "batch_size": batch_size,
-    "max_epochs": max_epochs,
-    "val_size": 0.2,
+training_params = {
+    "batch_size": "full",
+    "max_epochs": 3000,
     "lr": 1e-4,
-    "lr_factor": 0.5,
-    "lr_patience": 300,
+    "weight_decay": 5e-5,
     "stop_patience": 600,
     "stop_min_delta": 0,
-    "weight_decay": 5e-5,
+    "val_size": 0.2,
 }
 
 
+@ray.remote(num_gpus=1 / MAX_ACTORS, max_calls=1)
+def model_training(x, y, rho, progress):
+    model = ClassMI(x, y, **model_params)
+    model.fit(**training_params, verbose=False)
+    progress.update.remote()
+    return (rho, model.get_mi())
+
+
 def testClassMi01():
-    mu = np.array([0, 0])
+    print("Test 01/02")
+    # gaussian noise parameter
     Rho = np.linspace(-0.98, 0.98, 21)
-    true_mi = np.zeros(*Rho.shape)
-    class_mi = np.zeros(*true_mi.shape)
+    Rho_label = [f"{x:.2f}" for x in Rho]
+    sims_params = []
+    results = []
 
-    for i, rho in enumerate(tqdm(Rho)):
+    for i, rho in enumerate(Rho):
         # Generate data
-        cov_matrix = np.array([[1, rho], [rho, 1]])
-        joint_samples_train = np.random.multivariate_normal(
-            mean=mu, cov=cov_matrix, size=(N, 1)
-        )
-        X = np.squeeze(joint_samples_train[:, :, 0])
-        Y = np.squeeze(joint_samples_train[:, :, 1])
+        x, y, true_mi = gausianSamples(N, rho)
+        results += [(Rho_label[i], "true value", true_mi)]
+        x_id = ray.put(x)
+        y_id = ray.put(y)
+        for _ in range(NREA):
+            sim_params_ = {
+                "x": x_id,
+                "y": y_id,
+                "rho": Rho_label[i],
+            }
+            sims_params.append(sim_params_)
 
-        # Teoric value
-        true_mi[i] = -0.5 * np.log(1 - rho**2)
-        # models
-        class_mi_model = ClassMI(X, Y, **model_params)
-        # Train models
-        class_mi_model.fit(**train_params, verbose=False)
-        # Get mi estimation
-        class_mi[i] = class_mi_model.get_mi()
-
-    # Plot
-    fig, ax = plt.subplots(1, 1, sharex=True, sharey=True)
-    ax.plot(Rho, true_mi, ".k", label="True mi")
-    ax.plot(Rho, class_mi, "b", label="Class mi")
-    ax.legend(loc="upper center")
-    ax.set_xlabel("rho")
-    ax.set_ylabel("mi")
-    ax.set_title("Classification based mutual information")
+    progress = Progress.remote(len(sims_params))
+    random.shuffle(sims_params)
+    res = ray.get(
+        [
+            model_training.remote(
+                s["x"],
+                s["y"],
+                s["rho"],
+                progress,
+            )
+            for s in sims_params
+        ]
+    )
+    # parse-results
+    results += [(rho_key, "ccmi", mi) for rho_key, mi in res]
+    results = pd.DataFrame(results, columns=["rho", "method", "mi"])
+    sns.catplot(data=results, x="rho", y="mi", hue="method", kind="bar")
 
 
 def testClassMi02():
-    mu = np.array([0, 0])
     rho = 0.95
-    true_mi = -0.5 * np.log(1 - rho**2)
     # Generate data
-    cov_matrix = np.array([[1, rho], [rho, 1]])
-    joint_samples_train = np.random.multivariate_normal(
-        mean=mu, cov=cov_matrix, size=(N, 1)
-    )
-    X = np.squeeze(joint_samples_train[:, :, 0])
-    Y = np.squeeze(joint_samples_train[:, :, 1])
+    x, y, true_mi = gausianSamples(N, rho)
     # models
-    class_mi_model = ClassMI(X, Y, **model_params)
+    class_mi_model = ClassMI(x, y, **model_params)
 
-    class_mi_model.fit(**train_params, verbose=True)
+    class_mi_model.fit(**training_params, verbose=True)
     # Get mi estimation
     class_mi = class_mi_model.get_mi()
     val_mi, val_loss = class_mi_model.get_curves()
@@ -94,7 +110,7 @@ def testClassMi02():
     axs[1].set_title("Cross-Entropy loss")
 
     fig.suptitle(
-        f"Curves for rho={rho}, true mi={true_mi:.2f} and estim. mi={class_mi:.2f} ",
+        f"Curves for rho={rho},\n true mi={true_mi:.2f} and estim. mi={class_mi:.2f} ",
         fontsize=13,
     )
 

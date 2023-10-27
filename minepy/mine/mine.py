@@ -54,20 +54,25 @@ class MineModel(nn.Module):
     def __init__(
         self,
         input_dim,
-        hidden_dim=50,
-        num_hidden_layers=2,
-        afn="elu",
+        hidden_layers=[64, 32],
+        afn="gelu",
         loss="mine",
         alpha=0.01,
         regWeight=0.1,
         targetVal=0.0,
     ):
         super().__init__()
+
+        hidden_layers = [int(x) for x in hidden_layers]
+
         activation_fn = get_activation_fn(afn)
-        seq = [nn.Linear(input_dim, hidden_dim), activation_fn()]
-        for _ in range(num_hidden_layers):
-            seq += [nn.Linear(hidden_dim, hidden_dim), activation_fn()]
-        seq += [nn.Linear(hidden_dim, 1)]
+        seq = [nn.Linear(input_dim, hidden_layers[0]), activation_fn()]
+        for i in range(len(hidden_layers) - 1):
+            seq += [
+                nn.Linear(hidden_layers[i], hidden_layers[i + 1]),
+                activation_fn(),
+            ]
+        seq += [nn.Linear(hidden_layers[-1], 1)]
         self.model = nn.Sequential(*seq)
         self.running_mean = 0
         self.loss = loss
@@ -108,9 +113,8 @@ class Mine(nn.Module):
         self,
         X,
         Y,
-        hidden_dim=50,
-        num_hidden_layers=2,
-        afn="elu",
+        hidden_layers=[32, 16, 8, 4],
+        afn="gelu",
         loss="mine_biased",
         alpha=0.1,
         regWeight=1.0,
@@ -131,8 +135,7 @@ class Mine(nn.Module):
 
         self.model = MineModel(
             input_dim=self.dx + self.dy,
-            hidden_dim=hidden_dim,
-            num_hidden_layers=num_hidden_layers,
+            hidden_layers=hidden_layers,
             afn=afn,
             loss=loss,
             alpha=alpha,
@@ -145,12 +148,12 @@ class Mine(nn.Module):
         self,
         batch_size=64,
         max_epochs=2000,
-        val_size=0.2,
         lr=1e-3,
         lr_factor=0.1,
         lr_patience=10,
         stop_patience=100,
         stop_min_delta=0,
+        val_size=0.2,
         verbose=False,
     ):
         opt = torch.optim.Adam(self.model.parameters(), lr=lr, betas=(0.9, 0.999))

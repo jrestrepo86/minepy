@@ -10,18 +10,9 @@ import seaborn as sns
 from matplotlib import pyplot as plt
 
 from minepy.class_mi.class_diff_cmi import ClassDiffCMI
+from tests.testTools import Progress, read_data
 
-DATA_PATH = "../data_cmi"
-FILES = {
-    "lf_10kdz20": {
-        "data": "Linear_Data/catF/data.10k.dz20.seed0.npy",
-        "ksg": "Linear_Data/catF/ksg_gt.dz20.npy",
-    },
-    "nl_10kdz20": {
-        "data": "Non_Linear_Data/catNon-lin-NI_6/data.10k.dz20.seed0.npy",
-        "ksg": "Non_Linear_Data/catNon-lin-NI_6/ksg_gt.dz20.npy",
-    },
-}
+FILES = ["lf_10kdz20", "nl_10kdz20"]
 
 NREA = 5  # number of realizations
 MAX_ACTORS = 5  # number of nodes
@@ -40,17 +31,7 @@ training_params = {
 }
 
 
-@ray.remote
-class Progress:
-    def __init__(self, max_it=1):
-        self.max_it = max_it
-        self.count = 0
-
-    def update(self):
-        self.count += 1
-        print(f"progress: {100* self.count/self.max_it:.2f}%")
-
-
+# @ray.remote(num_cpus= MAX_ACTORS)
 @ray.remote(num_gpus=1 / MAX_ACTORS, max_calls=1)
 def model_training(x, y, z, model_params, sim, progress):
     model = ClassDiffCMI(x, y, z, **model_params)
@@ -59,19 +40,9 @@ def model_training(x, y, z, model_params, sim, progress):
     return (sim, model.get_cmi())
 
 
-def read_data(key):
-    data = np.load(f"{DATA_PATH}/{FILES[key]['data']}")
-    true_cmi = np.load(f"{DATA_PATH}/{FILES[key]['ksg']}")
-    x = data[:, 0]
-    y = data[:, 1]
-    z = data[:, 2:]
-
-    return x, y, z, true_cmi[0]
-
-
 def cmiTest01():
     print("Test 01/02")
-    sims = FILES.keys()
+    sims = FILES
     results = []
     sims_params = []
     # Simulations
@@ -121,12 +92,12 @@ def cmiTest01():
 
 def cmiTest02():
     print("Test 02/02")
-    # data
-    data_keys = FILES.keys()
+    sims = FILES
 
-    for key in data_keys:
-        print(key)
-        x, y, z, true_cmi = read_data(key)
+    for sim in sims:
+        print(sim)
+        # data
+        x, y, z, true_cmi = read_data(sim)
         # model parameters
         gdim = 2 + z.shape[1]
         model_params = {
@@ -148,7 +119,7 @@ def cmiTest02():
 
         fig, axs = plt.subplots(3, 1, sharex=True, sharey=False)
         epoch = np.arange(val_cmi_epoch.size)
-        axs[0].set_title(f"CCMI-Diff sim {key}")
+        axs[0].set_title(f"CCMI-Diff sim {sim}")
         axs[0].plot(epoch, val_cmi_epoch, "b", label="val cmi")
         axs[0].axhline(true_cmi, color="g", label="true value")
         axs[0].axhline(cmi, color="k", label="estimated cmi")

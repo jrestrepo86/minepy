@@ -10,18 +10,9 @@ import seaborn as sns
 from matplotlib import pyplot as plt
 
 from minepy.gan_mi.gan_cmi import GanCMI
+from tests.testTools import Progress, read_data
 
-DATA_PATH = "../data_cmi"
-FILES = {
-    "lf_10kdz20": {
-        "data": "Linear_Data/catF/data.10k.dz20.seed0.npy",
-        "ksg": "Linear_Data/catF/ksg_gt.dz20.npy",
-    },
-    "nl_10kdz20": {
-        "data": "Non_Linear_Data/catNon-lin-NI_6/data.10k.dz20.seed0.npy",
-        "ksg": "Non_Linear_Data/catNon-lin-NI_6/ksg_gt.dz20.npy",
-    },
-}
+FILES = ["lf_10kdz20", "nl_10kdz20"]
 
 NREA = 5  # number of realizations
 MAX_ACTORS = 5  # number of nodes
@@ -42,17 +33,7 @@ training_params = {
 }
 
 
-@ray.remote
-class Progress:
-    def __init__(self, max_it=1):
-        self.max_it = max_it
-        self.count = 0
-
-    def update(self):
-        self.count += 1
-        print(f"progress: {100* self.count/self.max_it:.2f}%")
-
-
+# @ray.remote(num_cpus= MAX_ACTORS)
 @ray.remote(num_gpus=1 / MAX_ACTORS, max_calls=1)
 def model_training(x, y, z, model_params, sim, progress):
     model = GanCMI(x, y, z, **model_params)
@@ -61,19 +42,9 @@ def model_training(x, y, z, model_params, sim, progress):
     return (sim, model.get_cmi())
 
 
-def read_data(key):
-    data = np.load(f"{DATA_PATH}/{FILES[key]['data']}")
-    true_cmi = np.load(f"{DATA_PATH}/{FILES[key]['ksg']}")
-    x = data[:, 0]
-    y = data[:, 1]
-    z = data[:, 2:]
-
-    return x, y, z, true_cmi[0]
-
-
 def cmiTest01():
     print("Test 01/02")
-    sims = FILES.keys()
+    sims = FILES
     results = []
     sims_params = []
     # Simulations
@@ -125,10 +96,11 @@ def cmiTest01():
 
 def cmiTest02():
     print("Test 02/02")
-    sims = FILES.keys()
-
+    sims = FILES
+    # Simulations
     for sim in sims:
         print(sim)
+        # data
         x, y, z, true_cmi = read_data(sim)
         # model parameters
         gdim = noise_dim + z.shape[1]
