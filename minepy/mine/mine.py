@@ -1,13 +1,16 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+
 
 import math
 
 import numpy as np
 import torch
 import torch.nn as nn
-from torch.optim.lr_scheduler import ReduceLROnPlateau
+from torch.optim.lr_scheduler import CyclicLR
 from tqdm import tqdm
 
 from minepy.mine.mine_tools import mine_data_loader
@@ -54,8 +57,8 @@ class MineModel(nn.Module):
     def __init__(
         self,
         input_dim,
-        hidden_layers=[64, 32],
-        afn="gelu",
+        hidden_layers=[64, 32, 16, 8],
+        afn="elu",
         loss="mine",
         alpha=0.01,
         regWeight=0.1,
@@ -63,7 +66,7 @@ class MineModel(nn.Module):
     ):
         super().__init__()
 
-        hidden_layers = [int(x) for x in hidden_layers]
+        hidden_layers = [int(hl) for hl in hidden_layers]
 
         activation_fn = get_activation_fn(afn)
         seq = [nn.Linear(input_dim, hidden_layers[0]), activation_fn()]
@@ -80,10 +83,10 @@ class MineModel(nn.Module):
         self.regWeight = regWeight
         self.targetVal = targetVal
 
-    def forward(self, x, z):
-        z_marg = z[torch.randperm(z.shape[0])]
-        t = self.model(torch.cat((x, z), dim=1)).mean()
-        t_marg = self.model(torch.cat((x, z_marg), dim=1))
+    def forward(self, x, y):
+        y_marg = y[torch.randperm(y.shape[0])]
+        t = self.model(torch.cat((x, y), dim=1)).mean()
+        t_marg = self.model(torch.cat((x, y_marg), dim=1))
 
         if self.loss in ["mine"]:
             second_term, self.running_mean = ema_loss(
@@ -116,8 +119,8 @@ class Mine(nn.Module):
         hidden_layers=[32, 16, 8, 4],
         afn="gelu",
         loss="mine_biased",
-        alpha=0.1,
-        regWeight=1.0,
+        alpha=0.01,
+        regWeight=0.1,
         targetVal=0.0,
         device=None,
     ):
@@ -148,20 +151,17 @@ class Mine(nn.Module):
         self,
         batch_size=64,
         max_epochs=2000,
-        lr=1e-3,
-        lr_factor=0.1,
-        lr_patience=10,
+        lr=1e-6,
+        weight_decay=5e-5,
         stop_patience=100,
         stop_min_delta=0,
         val_size=0.2,
         verbose=False,
     ):
-        opt = torch.optim.Adam(self.model.parameters(), lr=lr, betas=(0.9, 0.999))
-        # opt = torch.optim.SGD(self.model.parameters(), lr=lr)
-
-        scheduler = ReduceLROnPlateau(
-            opt, mode="max", factor=lr_factor, patience=lr_patience, verbose=verbose
+        opt = torch.optim.RMSprop(
+            self.model.parameters(), lr=lr, weight_decay=weight_decay
         )
+        scheduler = CyclicLR(opt, base_lr=lr, max_lr=1e-3, mode="triangular2")
 
         early_stopping = EarlyStopping(patience=stop_patience, delta=stop_min_delta)
 
@@ -199,8 +199,7 @@ class Mine(nn.Module):
                 val_ema_loss_epoch.append(val_ema_loss.item())
                 val_mi_epoch.append(val_mi.item())
                 # learning rate scheduler
-                # scheduler.step(val_loss)
-                scheduler.step(val_ema_loss)
+                scheduler.step()
                 # early stopping
                 early_stopping(val_ema_loss)
 

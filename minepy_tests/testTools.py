@@ -63,7 +63,7 @@ class Progress:
         self.pbar.update()
 
 
-def gausianSamples(n, rho):
+def gaussianSamples(n, rho):
     mu = np.array([0, 0])
     cov_matrix = np.array([[1, rho], [rho, 1]])
     joint_samples_train = np.random.multivariate_normal(

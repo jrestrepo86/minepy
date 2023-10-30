@@ -65,7 +65,6 @@ class GanCMI(nn.Module):
     def regresor_loss(self, r_joint, r_marginal):
         joint_loss = r_joint.mean()
         marg_loss = torch.logsumexp(r_marginal, 0) - math.log(r_marginal.shape[0])
-        self.ref_marg_loss = marg_loss
         return -joint_loss + marg_loss
 
     def fit(
@@ -133,10 +132,6 @@ class GanCMI(nn.Module):
             reg_loss_epoch.append(reg_loss.item())
             # train generator
             for _ in range(g_training_steps):
-                # inds = torch.randint(0, n, (batch_size,))
-                # X = self.X[inds, :]
-                # Y = self.Y[inds, :]
-                # Z = self.Z[inds, :]
                 with torch.set_grad_enabled(True):
                     gen_opt.zero_grad()
                     noise = torch.normal(0, 1, size=(batch_size, self.noise_dim)).to(
@@ -170,6 +165,7 @@ class GanCMI(nn.Module):
             reg_scheduler.step()
             if early_stopping.early_stop:
                 break
+
         self.cmi_epoch = np.array(cmi_epoch)
         self.gen_loss_epoch = np.array(gen_loss_epoch)
         self.reg_loss_epoch = np.array(reg_loss_epoch)

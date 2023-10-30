@@ -9,8 +9,8 @@ import ray
 import seaborn as sns
 from matplotlib import pyplot as plt
 
-from minepy.class_mi.class_diff_cmi import ClassDiffCMI
-from tests.testTools import Progress, read_data
+from minepy.gan_mi.gan_cmi import GanCMI
+from minepy_tests.testTools import Progress, read_data
 
 FILES = ["lf_10kdz20", "nl_10kdz20"]
 
@@ -19,8 +19,8 @@ MAX_ACTORS = 5  # number of nodes
 
 # model parameters
 afn = "gelu"
+noise_dim = 80
 
-# Training
 training_params = {
     "batch_size": "full",
     "max_epochs": 8000,
@@ -28,13 +28,15 @@ training_params = {
     "weight_decay": 1e-5,
     "stop_patience": 1000,
     "stop_min_delta": 0.00,
+    "r_training_steps": 5,
+    "g_training_steps": 1,
 }
 
 
 # @ray.remote(num_cpus= MAX_ACTORS)
 @ray.remote(num_gpus=1 / MAX_ACTORS, max_calls=1)
 def model_training(x, y, z, model_params, sim, progress):
-    model = ClassDiffCMI(x, y, z, **model_params)
+    model = GanCMI(x, y, z, **model_params)
     model.fit(**training_params)
     progress.update.remote()
     return (sim, model.get_cmi())
@@ -53,7 +55,7 @@ def cmiTest01():
         x_id = ray.put(x)
         y_id = ray.put(y)
         z_id = ray.put(z)
-        gdim = 2 + z.shape[1]
+        gdim = noise_dim + z.shape[1]
         for _ in range(NREA):
             sim_params_ = {
                 "x": x_id,
@@ -61,9 +63,11 @@ def cmiTest01():
                 "z": z_id,
                 "sim": sim,
                 "model_params": {
-                    "hidden_layers_xyz": [gdim / 2, gdim / 4, gdim / 8],
-                    "hidden_layers_xz": [gdim / 2, gdim / 4, gdim / 8],
-                    "afn": afn,
+                    "noise_dim": noise_dim,
+                    "g_hidden_layers": [gdim, gdim / 2, gdim / 4],
+                    "g_afn": "gelu",
+                    "r_hidden_layers": [gdim / 2, gdim / 4, gdim / 8],
+                    "r_afn": "gelu",
                 },
             }
             sims_params.append(sim_params_)
@@ -84,7 +88,7 @@ def cmiTest01():
         ]
     )
     # parse-results
-    results += [(sim_key, "ccmi-diff", cmi) for sim_key, cmi in res]
+    results += [(sim_key, "c-mi-gan", cmi) for sim_key, cmi in res]
     results = pd.DataFrame(results, columns=["sim", "method", "cmi"])
     # plot
     sns.catplot(data=results, x="sim", y="cmi", hue="method", kind="bar")
@@ -93,44 +97,44 @@ def cmiTest01():
 def cmiTest02():
     print("Test 02/02")
     sims = FILES
-
+    # Simulations
     for sim in sims:
         print(sim)
         # data
         x, y, z, true_cmi = read_data(sim)
         # model parameters
-        gdim = 2 + z.shape[1]
+        gdim = noise_dim + z.shape[1]
         model_params = {
-            "hidden_layers_xyz": [gdim / 2, gdim / 4, gdim / 8],
-            "hidden_layers_xz": [gdim / 2, gdim / 4, gdim / 8],
-            "afn": afn,
+            "noise_dim": noise_dim,
+            "g_hidden_layers": [gdim, gdim / 2, gdim / 4],
+            "g_afn": "gelu",
+            "r_hidden_layers": [gdim / 2, gdim / 4, gdim / 8],
+            "r_afn": "gelu",
         }
 
-        class_cmigen_model = ClassDiffCMI(x, y, z, **model_params)
-        class_cmigen_model.fit(**training_params, verbose=True)
-        cmi = class_cmigen_model.get_cmi()
+        cmigan_model = GanCMI(x, y, z, **model_params)
+        cmigan_model.fit(**training_params, verbose=True)
+        cmi = cmigan_model.get_cmi()
         (
-            val_cmi_epoch,
-            val_dkl_epoch_xyz,
-            val_loss_epoch_xyz,
-            val_dkl_epoch_xz,
-            val_loss_epoch_xz,
-        ) = class_cmigen_model.get_curves()
+            cmi_epoch,
+            gen_loss_epoch,
+            reg_loss_epoch,
+            reg_loss_smooth_epoch,
+        ) = cmigan_model.get_curves()
 
         fig, axs = plt.subplots(3, 1, sharex=True, sharey=False)
-        epoch = np.arange(val_cmi_epoch.size)
-        axs[0].set_title(f"CCMI-Diff sim {sim}")
-        axs[0].plot(epoch, val_cmi_epoch, "b", label="val cmi")
-        axs[0].axhline(true_cmi, color="g", label="true value")
+        epoch = np.arange(cmi_epoch.size)
+        axs[0].set_title(f"C-MI-Gan - {sim}")
+        axs[0].plot(epoch, cmi_epoch, "r", label="val cmi")
+        axs[0].axhline(true_cmi, color="b", label="true value")
         axs[0].axhline(cmi, color="k", label="estimated cmi")
         axs[0].legend(loc="lower right")
-        axs[1].plot(epoch, val_dkl_epoch_xyz, "r", label="val dkl xyz")
-        axs[1].plot(epoch, val_dkl_epoch_xz, "b", label="val dkl xy")
-        axs[1].legend(loc="upper right")
-        axs[2].plot(epoch, val_loss_epoch_xyz, "r", label="val loss xyz")
-        axs[2].plot(epoch, val_loss_epoch_xz, "b", label="val loss xy")
-        axs[2].legend(loc="upper right")
+        axs[1].plot(epoch, gen_loss_epoch, "b", label="gen loss")
+        axs[1].legend(loc="lower right")
+        axs[2].plot(epoch, reg_loss_epoch, "r", label="reg loss")
+        axs[2].plot(epoch, reg_loss_smooth_epoch, "k", label="smoothed reg loss")
         axs[2].set_xlabel("Epoch", fontweight="bold")
+        axs[2].legend(loc="upper right")
 
 
 if __name__ == "__main__":

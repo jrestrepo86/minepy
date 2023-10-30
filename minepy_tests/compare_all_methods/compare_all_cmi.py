@@ -13,7 +13,7 @@ from matplotlib import pyplot as plt
 from minepy.class_mi.class_diff_cmi import ClassDiffCMI
 from minepy.class_mi.class_gen_cmi import ClassGenCMI
 from minepy.gan_mi.gan_cmi import GanCMI
-from tests.testTools import Progress, read_data
+from minepy_tests.testTools import Progress, read_data
 
 DATA_PATH = "../data_cmi"
 FILES = [

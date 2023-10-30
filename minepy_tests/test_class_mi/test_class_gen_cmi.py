@@ -10,7 +10,7 @@ import seaborn as sns
 from matplotlib import pyplot as plt
 
 from minepy.class_mi.class_gen_cmi import ClassGenCMI
-from tests.testTools import Progress, read_data
+from minepy_tests.testTools import Progress, read_data
 
 FILES = ["lf_10kdz20", "nl_10kdz20"]
 

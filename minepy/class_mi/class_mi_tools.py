@@ -30,8 +30,6 @@ class class_mi_data_loader:
         self.samples = samples
         self.labels = labels
 
-        return samples, labels
-
     def split_train_val(self, val_size, device):
         n = self.samples.shape[0]
         # send data top device
