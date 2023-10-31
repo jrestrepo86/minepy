@@ -15,7 +15,7 @@ from minepy_tests.testTools import Progress, gaussianSamples
 # from tests.testTools import Progress, gausianSamples
 
 
-NREA = 15  # number of realizations
+NREA = 5  # number of realizations
 MAX_ACTORS = 7  # number of nodes
 N = 3000  # series data points
 # Net parameters
@@ -134,5 +134,5 @@ def testGanMi02():
 
 if __name__ == "__main__":
     testGanMi01()
-    testGanMi02()
+    # testGanMi02()
     plt.show()

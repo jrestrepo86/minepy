@@ -58,7 +58,7 @@ class MineModel(nn.Module):
         self,
         input_dim,
         hidden_layers=[64, 32, 16, 8],
-        afn="elu",
+        afn="gelu",
         loss="mine",
         alpha=0.01,
         regWeight=0.1,

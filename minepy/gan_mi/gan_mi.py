@@ -72,9 +72,9 @@ class GanMI(nn.Module):
         X,
         Y,
         noise_dim=40,
-        g_hidden_layers=[64, 32],
+        g_hidden_layers=[64, 32, 16, 8],
         g_afn="gelu",
-        r_hidden_layers=[32, 16],
+        r_hidden_layers=[32, 16, 8],
         r_afn="gelu",
         device=None,
     ):
@@ -114,8 +114,8 @@ class GanMI(nn.Module):
     def fit(
         self,
         batch_size=64,
-        max_epochs=2000,
-        lr=1e-4,
+        max_epochs=40000,
+        lr=1e-6,
         weight_decay=5e-5,
         stop_patience=1000,
         stop_min_delta=0.0,
@@ -132,12 +132,8 @@ class GanMI(nn.Module):
             self.model.regresor.parameters(), lr=lr, weight_decay=weight_decay
         )
 
-        gen_scheduler = CyclicLR(
-            gen_opt, base_lr=lr, max_lr=1e-3, mode="triangular2", step_size_up=1000
-        )
-        reg_scheduler = CyclicLR(
-            reg_opt, base_lr=lr, max_lr=1e-3, mode="triangular2", step_size_up=1000
-        )
+        gen_scheduler = CyclicLR(gen_opt, base_lr=lr, max_lr=1e-3, mode="triangular2")
+        reg_scheduler = CyclicLR(reg_opt, base_lr=lr, max_lr=1e-3, mode="triangular2")
 
         early_stopping = EarlyStopping(
             patience=stop_patience, delta=int(stop_min_delta)
@@ -215,7 +211,7 @@ class GanMI(nn.Module):
         self.reg_loss_smooth_epoch = np.array(reg_loss_smooth_epoch)
 
     def get_mi(self):
-        return self.mi_epoch.mean()
+        return -self.reg_loss_smooth_epoch[-1]
 
     def get_curves(self):
         return (

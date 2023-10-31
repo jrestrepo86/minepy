@@ -27,8 +27,8 @@ model_params = {"hidden_layers": [32, 16, 8, 4], "afn": "gelu"}
 # Training
 training_params = {
     "batch_size": "full",
-    "max_epochs": 3000,
-    "lr": 1e-4,
+    "max_epochs": 40000,
+    "lr": 1e-6,
     "weight_decay": 5e-5,
     "stop_patience": 600,
     "stop_min_delta": 0,
