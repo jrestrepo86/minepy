@@ -12,7 +12,12 @@ from matplotlib import pyplot as plt
 from minepy.gan_mi.gan_cmi import GanCMI
 from minepy_tests.testTools import Progress, read_data
 
-FILES = ["lf_10kdz20", "nl_10kdz20"]
+FILES = [
+    "lf_5kdz20",
+    "lf_10kdz20",
+    "nl_5kdz10",
+    "nl_10kdz20",
+]
 
 NREA = 5  # number of realizations
 MAX_ACTORS = 5  # number of nodes
@@ -24,7 +29,10 @@ noise_dim = 80
 training_params = {
     "batch_size": "full",
     "max_epochs": 8000,
-    "lr": 1e-6,
+    "g_base_lr": 1e-8,
+    "g_max_lr": 5e-5,
+    "r_base_lr": 1e-8,
+    "r_max_lr": 1e-4,
     "weight_decay": 1e-5,
     "stop_patience": 1000,
     "stop_min_delta": 0.00,
@@ -138,6 +146,6 @@ def cmiTest02():
 
 
 if __name__ == "__main__":
-    cmiTest01()
+    # cmiTest01()
     cmiTest02()
     plt.show()

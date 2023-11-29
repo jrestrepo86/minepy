@@ -42,6 +42,7 @@ class CGanModel(nn.Module):
         seq = [nn.Linear(g_input_dim, g_hidden_layers[0]), activation_fn()]
         for i in range(len(g_hidden_layers) - 1):
             seq += [
+                # nn.Dropout(p=0.5),
                 nn.Linear(g_hidden_layers[i], g_hidden_layers[i + 1]),
                 activation_fn(),
             ]

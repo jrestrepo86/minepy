@@ -3,6 +3,9 @@
 """
 Classification conditional mutual information
 generator approach
+
+How to Train a GAN? Tips and tricks to make GANs work
+https://github.com/soumith/ganhacks
 """
 
 
@@ -71,7 +74,10 @@ class GanCMI(nn.Module):
         self,
         batch_size=64,
         max_epochs=2000,
-        lr=1e-4,
+        g_base_lr=1e-8,
+        g_max_lr=1e-5,
+        r_base_lr=1e-5,
+        r_max_lr=1e-3,
         weight_decay=5e-5,
         stop_patience=1000,
         stop_min_delta=0.0,
@@ -80,22 +86,23 @@ class GanCMI(nn.Module):
         verbose=False,
     ):
         gen_opt = torch.optim.RMSprop(
-            self.model.generator.parameters(), lr=lr, weight_decay=weight_decay
+            self.model.generator.parameters(), lr=g_base_lr, weight_decay=weight_decay
         )
+
         reg_opt = torch.optim.RMSprop(
-            self.model.regresor.parameters(), lr=lr, weight_decay=weight_decay
+            self.model.regresor.parameters(), lr=r_base_lr, weight_decay=weight_decay
         )
 
         gen_scheduler = CyclicLR(
-            gen_opt, base_lr=lr, max_lr=1e-3, mode="triangular2", step_size_up=1000
+            gen_opt, base_lr=g_base_lr, max_lr=g_max_lr, mode="triangular2"
         )
         reg_scheduler = CyclicLR(
-            reg_opt, base_lr=lr, max_lr=1e-3, mode="triangular2", step_size_up=1000
+            reg_opt, base_lr=r_base_lr, max_lr=r_max_lr, mode="triangular2"
         )
 
-        early_stopping = EarlyStopping(
-            patience=stop_patience, delta=int(stop_min_delta)
-        )
+        # early_stopping = EarlyStopping(
+        #     patience=stop_patience, delta=int(stop_min_delta)
+        # )
 
         reg_loss_ema_smooth = ExpMovingAverageSmooth()
 
@@ -106,7 +113,7 @@ class GanCMI(nn.Module):
 
         # training
         self.train()
-        for _ in tqdm(range(max_epochs), disable=not verbose):
+        for i in tqdm(range(max_epochs), disable=not verbose):
             n = self.X.shape[0]
             if batch_size == "full":
                 batch_size = n
@@ -158,13 +165,14 @@ class GanCMI(nn.Module):
                 reg_loss_smooth = reg_loss_ema_smooth(reg_loss)
                 reg_loss_smooth_epoch.append(reg_loss_smooth.item())
                 # early_stopping
-                early_stopping(reg_loss_smooth)
+                # if i >= 10000:  # skip generator initial drifting
+                #     early_stopping(reg_loss_smooth)
 
             cmi_epoch.append(-reg_loss.item())
             gen_scheduler.step()
             reg_scheduler.step()
-            if early_stopping.early_stop:
-                break
+            # if early_stopping.early_stop:
+            #     break
 
         self.cmi_epoch = np.array(cmi_epoch)
         self.gen_loss_epoch = np.array(gen_loss_epoch)
@@ -172,7 +180,7 @@ class GanCMI(nn.Module):
         self.reg_loss_smooth_epoch = np.array(reg_loss_smooth_epoch)
 
     def get_cmi(self):
-        return -self.reg_loss_smooth_epoch.mean()
+        return -np.mean(self.reg_loss_smooth_epoch[-2000:])
 
     def get_curves(self):
         return (
