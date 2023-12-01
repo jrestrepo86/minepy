@@ -126,14 +126,18 @@ class class_cmi_gen_data_loader:
         return nn_idx
 
     def set_joint_marginals(self, X, Y, Z):
+        n = X.shape[0]
+        n = int(n) if ((int(n) % 2) == 0) else int(n) - 1
+        X = X[:n, :]
+        Y = Y[:n, :]
+        Z = Z[:n, :]
         # set joint p(x,y,z)
         data_joint = np.hstack((X, Y, Z))
         # set marginals - Gerate y|z samples (knn)
         # split data for the classifier and the generator (knn)
-        n = X.shape[0]
         rand_perm = np.random.permutation(n)
         data_marg = np.array([]).reshape(0, X.shape[1] + Y.shape[1] + Z.shape[1])
-        for inds in np.split(rand_perm, 2, axis=0):
+        for inds in np.array_split(rand_perm, 2, axis=0):
             mask = np.ones(n, dtype=bool)
             mask[inds] = False
             class_idx, gen_idx = mask, np.logical_not(mask)
