@@ -23,8 +23,8 @@ afn = "gelu"
 # Training
 training_params = {
     "batch_size": "full",
-    "max_epochs": 8000,
-    "lr": 1e-6,
+    "max_epochs": 16000,
+    "lr": 1e-8,
     "stop_patience": 1000,
     "stop_min_delta": 0.00,
 }
@@ -108,6 +108,7 @@ def cmiTest02():
         (
             val_cmi_epoch,
             val_loss_epoch,
+            val_loss_smoothe_epoch,
         ) = class_cmigen_model.get_curves()
 
         fig, axs = plt.subplots(2, 1, sharex=True, sharey=False)
@@ -118,6 +119,7 @@ def cmiTest02():
         axs[0].axhline(cmi, color="k", label="estimated cmi")
         axs[0].legend(loc="lower right")
         axs[1].plot(epoch, val_loss_epoch, "b", label="val loss")
+        axs[1].plot(epoch, val_loss_smoothe_epoch, "r", label="val loss smth")
         axs[1].legend(loc="upper right")
         axs[1].set_xlabel("Epoch", fontweight="bold")
 

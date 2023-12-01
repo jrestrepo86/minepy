@@ -79,7 +79,7 @@ class ClassGenCMI(nn.Module):
         (
             self.val_dkl_epoch,
             self.val_loss_epoch,
-            self.fepoch,
+            self.val_loss_smoot_epoch,
         ) = self.model.fit_model(
             self.data_loader.train_samples,
             self.data_loader.train_labels,
@@ -95,4 +95,5 @@ class ClassGenCMI(nn.Module):
         return (
             self.val_dkl_epoch,
             self.val_loss_epoch,
+            self.val_loss_smoot_epoch,
         )

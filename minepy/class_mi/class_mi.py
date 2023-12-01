@@ -91,7 +91,7 @@ class ClassMiModel(nn.Module):
         )
         scheduler = CyclicLR(opt, base_lr=lr, max_lr=1e-3, mode="triangular2")
         early_stopping = EarlyStopping(
-            patience=stop_patience, delta=int(stop_min_delta)
+            patience=int(stop_patience), delta=stop_min_delta
         )
 
         val_loss_ema_smooth = ExpMovingAverageSmooth()
@@ -126,16 +126,15 @@ class ClassMiModel(nn.Module):
                 # learning rate scheduler
                 scheduler.step()
                 # early stopping
-                early_stopping(val_loss_smooth)
+                # early_stopping(val_loss_smooth)
 
             if early_stopping.early_stop:
                 break
 
-        fepoch = i
         return (
             np.array(val_dkl_epoch),
             np.array(val_loss_epoch),
-            fepoch,
+            np.array(val_loss_smooth_epoch),
         )
 
 
@@ -200,7 +199,7 @@ class ClassMI(nn.Module):
         )
 
     def get_mi(self):
-        return self.val_dkl_epoch.max()
+        return np.mean(self.val_dkl_epoch[-2000:])
 
     def get_curves(self):
         return (
