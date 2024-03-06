@@ -94,7 +94,7 @@ class ClassDiffCMI(nn.Module):
             self.data_loader.train_labels_xyz,
             self.data_loader.val_samples_xyz,
             self.data_loader.val_labels_xyz,
-            **fit_params
+            **fit_params,
         )
 
         # Estimate I(X,Z)
@@ -107,7 +107,7 @@ class ClassDiffCMI(nn.Module):
             self.data_loader.train_labels_xz,
             self.data_loader.val_samples_xz,
             self.data_loader.val_labels_xz,
-            **fit_params
+            **fit_params,
         )
 
     def get_cmi(self):

@@ -22,8 +22,12 @@ from torch.optim.lr_scheduler import CyclicLR
 from tqdm import tqdm
 
 from minepy.class_mi.class_mi_tools import class_mi_data_loader
-from minepy.minepy_tools import (EarlyStopping, ExpMovingAverageSmooth,
-                                 get_activation_fn, toColVector)
+from minepy.minepy_tools import (
+    EarlyStopping,
+    ExpMovingAverageSmooth,
+    get_activation_fn,
+    toColVector,
+)
 
 EPS = 1e-10
 
@@ -195,7 +199,7 @@ class ClassMI(nn.Module):
             self.data_loader.train_labels,
             self.data_loader.val_samples,
             self.data_loader.val_labels,
-            **fit_params
+            **fit_params,
         )
 
     def get_mi(self):

@@ -1,9 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
-
 
 import math
 
@@ -14,8 +11,12 @@ from torch.optim.lr_scheduler import CyclicLR
 from tqdm import tqdm
 
 from minepy.mine.mine_tools import mine_data_loader
-from minepy.minepy_tools import (EarlyStopping, ExpMovingAverageSmooth,
-                                 get_activation_fn, toColVector)
+from minepy.minepy_tools import (
+    EarlyStopping,
+    ExpMovingAverageSmooth,
+    get_activation_fn,
+    toColVector,
+)
 
 EPS = 1e-10
 

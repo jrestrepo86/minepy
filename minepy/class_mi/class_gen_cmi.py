@@ -85,7 +85,7 @@ class ClassGenCMI(nn.Module):
             self.data_loader.train_labels,
             self.data_loader.val_samples,
             self.data_loader.val_labels,
-            **fit_params
+            **fit_params,
         )
 
     def get_cmi(self):
