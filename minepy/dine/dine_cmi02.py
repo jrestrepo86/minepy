@@ -6,8 +6,7 @@ from torch.optim.lr_scheduler import CyclicLR, ReduceLROnPlateau
 from tqdm import tqdm
 
 from minepy.dine.dine_tools import UniformFlow, data_loader
-from minepy.minepy_tools import (EarlyStopping, ExpMovingAverageSmooth,
-                                 toColVector)
+from minepy.minepy_tools import EarlyStopping, ExpMovingAverageSmooth, toColVector
 
 EPS = 1e-6
 

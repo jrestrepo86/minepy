@@ -68,9 +68,9 @@ def get_z(N, dz, rng):
 
 
 def non_lin_fun(x, rng):
-    choice = rng.randint(7)
+    choice = rng.randint(5)
     # choice = rng.randint(6)
-    print(choice)
+    # print(choice)
     x = x / x.std()
 
     if choice == 0:

@@ -96,7 +96,7 @@ target/
 # IPython
 profile_default/
 ipython_config.py
-
+__pycache__
 # pyenv
 .python-version
 

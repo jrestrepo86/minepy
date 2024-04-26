@@ -5,16 +5,16 @@ from torch.distributions.normal import Normal
 from torch.nn import functional as F
 
 
-def MLP(d_in, d_out, hidden_sizes):
+def MLP(d_in, d_out, hidden_sizes=None):
     if isinstance(hidden_sizes, int):
         hidden_sizes = [hidden_sizes]
-    hidden_sizes = [d_in] + hidden_sizes + [d_out]
+    hidden_sizes = [d_in] + (hidden_sizes or []) + [d_out]
 
     layers = []
     for i in range(len(hidden_sizes) - 1):
         layers.append(nn.Linear(hidden_sizes[i], hidden_sizes[i + 1]))
         if i < len(hidden_sizes) - 2:
-            layers.append(nn.ReLU())
+            layers.append(nn.ReLU(inplace=True))
             layers.append(nn.BatchNorm1d(hidden_sizes[i + 1]))
 
     return nn.Sequential(*layers)
@@ -57,7 +57,7 @@ def MaskedMLP(d_in, d_out, n_groups, hidden_sizes, mask_type):
     if isinstance(hidden_sizes, int):
         hidden_sizes = [hidden_sizes]
     hidden_sizes = [d_in] + hidden_sizes + [d_out]
-    act_func = lambda: nn.ReLU()
+    act_func = lambda: nn.ReLU(inplace=True)
     layers = []
     for i in range(len(hidden_sizes) - 1):
         mask = get_mask(
@@ -99,7 +99,6 @@ class UniformFlow(nn.Module):
         N = X.shape[0]
 
         c = self.conditioner(X) + self.Z_encoder(Z).repeat(1, self.d)  # N x [d x h]
-        # c = self.Z_encoder(Z).repeat(1, self.d)  # N x [d x h]
         gmm = self.c_to_gmm(c).view(N, self.d, -1)
         mu = gmm[..., : self.n_components]
         std = gmm[..., self.n_components : 2 * self.n_components].exp()

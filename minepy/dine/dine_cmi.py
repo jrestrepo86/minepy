@@ -2,11 +2,11 @@ import numpy as np
 import torch
 from scipy.stats import norm
 from torch import nn
-from torch.optim.lr_scheduler import CyclicLR, ReduceLROnPlateau
+from torch.optim.lr_scheduler import CyclicLR
 from tqdm import tqdm
 
 from minepy.dine.dine_tools import UniformFlow, data_loader
-from minepy.minepy_tools import toColVector
+from minepy.minepy_tools import EarlyStopping, toColVector
 
 EPS = 1e-6
 
@@ -92,6 +92,8 @@ class DineCMI(nn.Module):
         opt = torch.optim.RMSprop(self.parameters(), lr=lr, weight_decay=weight_decay)
         scheduler = CyclicLR(opt, base_lr=lr, max_lr=1e-3, mode="triangular2")
 
+        early_stopping = EarlyStopping(patience=10, delta=0)
+
         Xtrain, Ytrain, Ztrain, Xval, Yval, Zval, X, Y, Z = data_loader(
             self.X, self.Y, self.Z, val_size=val_size, device=self.device
         )
@@ -103,28 +105,44 @@ class DineCMI(nn.Module):
         # training
         self.train()
         for _ in tqdm(range(max_epochs), disable=not verbose):
-            n = Xtrain.shape[0]
-            rand_perm = torch.randperm(n)
+            rand_perm = torch.randperm(Xtrain.shape[0])
             if batch_size == "full":
                 batch_size = n
             self.train()
+            train_step_outputs = []
             for inds in rand_perm.split(batch_size, dim=0):
                 with torch.set_grad_enabled(True):
                     opt.zero_grad()
                     train_loss = self.loss(
                         Xtrain[inds, :], Ytrain[inds, :], Ztrain[inds, :]
                     )
+                    train_step_outputs.append(train_loss)
                     train_loss.backward()
                     opt.step()
-            train_loss_epoch.append(train_loss.item())
+
+            avg_loss = torch.stack(train_step_outputs).mean()
+            train_loss_epoch.append(avg_loss.item())
+            # scheduler.step(avg_loss)
+            scheduler.step()
             self.eval()
-            with torch.set_grad_enabled(False):
-                val_loss = self.loss(Xval, Yval, Zval)
-                val_loss_epoch.append(val_loss.item())
-                cmi_epoch.append(self.get_cmi())
-                # learning rate scheduler
-                # scheduler.step(val_loss)
-                scheduler.step()
+            rand_perm = torch.randperm(Xval.shape[0])
+            validation_step_outputs = []
+            for inds in rand_perm.split(batch_size, dim=0):
+                with torch.set_grad_enabled(False):
+                    val_loss = self.loss(Xval[inds, :], Yval[inds, :], Zval[inds, :])
+                    validation_step_outputs.append(val_loss)
+            avg_loss = torch.stack(validation_step_outputs).mean()
+            val_loss_epoch.append(avg_loss.item())
+            cmi_epoch.append(self.get_cmi())
+            # learning rate scheduler
+            # scheduler.step(val_loss)
+            # scheduler.step(avg_loss)
+            # scheduler.step()
+
+            early_stopping(avg_loss)
+            if early_stopping.early_stop:
+                break
+
         self.val_loss_epoch = np.array(val_loss_epoch)
         self.train_loss_epoch = np.array(train_loss_epoch)
         self.cmi_epoch = np.array(cmi_epoch)

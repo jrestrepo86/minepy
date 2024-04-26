@@ -18,8 +18,7 @@ from torch.optim.lr_scheduler import CyclicLR
 from tqdm import tqdm
 
 from minepy.gan_mi.gan_mi import CGanModel
-from minepy.minepy_tools import (EarlyStopping, ExpMovingAverageSmooth,
-                                 toColVector)
+from minepy.minepy_tools import EarlyStopping, ExpMovingAverageSmooth, toColVector
 
 
 class GanCMI(nn.Module):

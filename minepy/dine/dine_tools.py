@@ -25,7 +25,7 @@ def MLP(
         layers.append(nn.Linear(hidden_sizes[i], hidden_sizes[i + 1]))
         if i < len(hidden_sizes) - 2:
             layers.append(activation_fn())
-            # layers.append(nn.BatchNorm1d(hidden_sizes[i + 1]))
+            layers.append(nn.BatchNorm1d(hidden_sizes[i + 1]))
 
     return nn.Sequential(*layers)
 
@@ -43,7 +43,7 @@ class UniformFlow(nn.Module):
         self.z_to_logstd = MLP(dz, n_components, hidden_sizes=hidden_sizes, afn=afn)
         self.z_to_w = nn.Sequential(
             *MLP(dz, n_components, hidden_sizes=hidden_sizes, afn=afn),
-            nn.Softmax(dim=1)
+            nn.Softmax(dim=1),
         )
 
     def forward(self, X, Z):

@@ -17,6 +17,7 @@ MAX_ACTORS = 7  # number of nodes
 N = 3000  # series data points
 METHODS = ["mine_biased", "mine", "remine"]
 
+
 # model parameters
 general_model_params = {
     "hidden_layers": [64, 32, 16, 8, 4],
