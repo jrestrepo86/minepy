@@ -12,9 +12,9 @@ from matplotlib import pyplot as plt
 from minepy.mine.mine import Mine
 from minepy_tests.testTools import Progress, gaussian_samples
 
-NREA = 6  # number of realizations
+NREA = 1  # number of realizations
 MAX_ACTORS = 12  # number of nodes (parallel computing)
-N = 3000  # series data points
+N = 10000  # series data points
 METHODS = ["mine_biased", "mine", "remine"]
 
 
@@ -27,7 +27,7 @@ general_model_params = {
 training_params = {
     "batch_size": "full",
     "max_epochs": 40000,
-    "lr": 1e-3,
+    "lr": 5e-3,
     "weight_decay": 5e-5,
     "stop_patience": 500,
     "stop_min_delta": 0.0,
@@ -75,12 +75,13 @@ def testMine01():
         results += [(Rho_label[i], "true value", true_mi)]
         x_id = ray.put(x)
         y_id = ray.put(y)
+        true_mi = 0
         for method in METHODS:
             model_params = set_model_parameters(method)
             for _ in range(NREA):
                 sim_params_ = {
                     "x": x_id,
-                    "y": y_id,
+                    "y": x_id,
                     "rho": Rho_label[i],
                     "method": method,
                     "model_params": model_params,
@@ -117,9 +118,11 @@ def testMine01():
 
 def testMine02():
     for method in METHODS:
-        rho = 0.58
+        rho = 0.95
         # Generate data
         x, y, true_mi, _ = gaussian_samples(N, rho)
+        # x = np.random.randn(N)
+        # true_mi = 0.5 * np.log(2 * np.pi * np.exp(1))
         # model parameters
         model_params = set_model_parameters(method)
         # models
@@ -157,6 +160,6 @@ def testMine02():
 
 
 if __name__ == "__main__":
-    testMine01()
+    # testMine01()
     testMine02()
     plt.show()

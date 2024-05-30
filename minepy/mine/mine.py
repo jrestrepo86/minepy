@@ -9,6 +9,8 @@ import torch
 import torch.nn as nn
 from torch.optim.lr_scheduler import CyclicLR
 from tqdm import tqdm
+import schedulefree
+
 
 from minepy.mine.mine_tools import mine_data_loader
 from minepy.minepy_tools import (
@@ -85,7 +87,9 @@ class MineModel(nn.Module):
         self.targetVal = targetVal
 
     def forward(self, x, y):
+
         y_marg = y[torch.randperm(y.shape[0])]
+
         t = self.model(torch.cat((x, y), dim=1)).mean()
         t_marg = self.model(torch.cat((x, y_marg), dim=1))
 
@@ -152,17 +156,18 @@ class Mine(nn.Module):
         self,
         batch_size=64,
         max_epochs=2000,
-        lr=1e-6,
+        lr=1e-3,
         weight_decay=5e-5,
         stop_patience=100,
         stop_min_delta=0,
         val_size=0.2,
         verbose=False,
     ):
-        opt = torch.optim.RMSprop(
-            self.model.parameters(), lr=lr, weight_decay=weight_decay
-        )
-        scheduler = CyclicLR(opt, base_lr=lr, max_lr=1e-3, mode="triangular2")
+        # opt = torch.optim.RMSprop(
+        #     self.model.parameters(), lr=lr, weight_decay=weight_decay
+        # )
+        # scheduler = CyclicLR(opt, base_lr=lr, max_lr=1e-3, mode="triangular2")
+        opt = schedulefree.AdamWScheduleFree(self.model.parameters(), lr=lr)
 
         early_stopping = EarlyStopping(patience=stop_patience, delta=stop_min_delta)
 
@@ -177,12 +182,13 @@ class Mine(nn.Module):
         val_mi_epoch = []
         test_mi_epoch = []
 
-        for i in tqdm(range(max_epochs), disable=not verbose):
+        for _ in tqdm(range(max_epochs), disable=not verbose):
             # training
             rand_perm = torch.randperm(Xtrain.shape[0])
             if batch_size == "full":
                 batch_size = Xtrain.shape[0]
             self.train()
+            opt.train()
             for inds in rand_perm.split(batch_size, dim=0):
                 with torch.set_grad_enabled(True):
                     opt.zero_grad()
@@ -192,6 +198,7 @@ class Mine(nn.Module):
 
             # validate and testing
             self.eval()
+            opt.eval()
             with torch.set_grad_enabled(False):
                 # validate
                 val_loss, val_mi = self.model(Xval, Yval)
@@ -199,10 +206,10 @@ class Mine(nn.Module):
                 val_ema_loss = val_loss_ema_smooth(val_loss)
                 val_ema_loss_epoch.append(val_ema_loss.item())
                 val_mi_epoch.append(val_mi.item())
-                # learning rate scheduler
-                scheduler.step()
-                # early stopping
-                early_stopping(val_ema_loss)
+
+                # scheduler.step() # learning rate scheduler
+
+                early_stopping(val_ema_loss)  # early stopping
 
                 # testing
                 _, test_mi = self.model(X, Y)
