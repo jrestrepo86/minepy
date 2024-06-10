@@ -27,8 +27,8 @@ class HNeeModel(nn.Module):
     def __init__(
         self,
         input_dim,
-        hidden_layers=[150, 150],
-        afn="gelu",
+        hidden_layers,
+        afn,
     ):
         super().__init__()
 
@@ -55,7 +55,7 @@ class HNee(nn.Module):
     def __init__(
         self,
         X,
-        hidden_layers=[32, 16, 8, 4],
+        hidden_layers=[150, 150, 150],
         afn="gelu",
         device=None,
     ):
@@ -75,14 +75,13 @@ class HNee(nn.Module):
         )
         self.model = self.model.to(self.device)
 
-        self.ref_min = torch.tensor(X.min()).to(device)
-        self.ref_max = torch.tensor(X.max()).to(device)
-        self.href = torch.tensor(math.log(self.ref_max - self.ref_min)).to(device)
+        self.ref_min = torch.tensor(X.min()).to(self.device)
+        self.ref_max = torch.tensor(X.max()).to(self.device)
+        self.href = torch.tensor(math.log(self.ref_max - self.ref_min)).to(self.device)
 
     def ref_sample_(self, x):
-        ref_min, ref_max = self.ref_min, self.ref_max
         ref_samp = torch.rand((self.n_ref_samples, x.shape[1]), device=self.device)
-        return (ref_max - ref_min) * ref_samp + ref_min
+        return (self.ref_max - self.ref_min) * ref_samp + self.ref_min
 
     def fit(
         self,
@@ -95,11 +94,13 @@ class HNee(nn.Module):
         val_size=0.2,
         verbose=False,
     ):
-
+        # Optimizer
         opt = schedulefree.AdamWScheduleFree(self.model.parameters(), lr=lr)
+        # Early stopping
         early_stopping = EarlyStopping(patience=stop_patience, delta=stop_min_delta)
+        # Smooth val loss
         val_loss_ema_smooth = ExpMovingAverageSmooth()
-
+        # Data
         Xtrain, Xval, X = hnee_data_loader(
             self.X, val_size=val_size, device=self.device
         )
