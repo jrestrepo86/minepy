@@ -11,8 +11,13 @@ from matplotlib import pyplot as plt
 
 from minepy.dine.dine_cmi import DineCMI
 from minepy.gan_mi.gan_cmi import GanCMI
-from minepy_tests.testTools import (FILES, Progress, cmi_non_lin_samples01,
-                                    cmi_non_lin_samples02, read_data)
+from minepy_tests.testTools import (
+    FILES,
+    Progress,
+    cmi_non_lin_samples01,
+    cmi_non_lin_samples02,
+    read_data,
+)
 
 FILES = [
     "lf_5kdz20",
