@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Classification conditional mutual information
+C-MI-GAN : Estimation of Conditional Mutual Information Using MinMax Formulation
+https://proceedings.mlr.press/v124/mondal20b/mondal20b.pdf
 generator approach
 
 How to Train a GAN? Tips and tricks to make GANs work
@@ -18,7 +19,8 @@ from torch.optim.lr_scheduler import CyclicLR
 from tqdm import tqdm
 
 from minepy.gan_mi.gan_mi import CGanModel
-from minepy.minepy_tools import EarlyStopping, ExpMovingAverageSmooth, toColVector
+from minepy.minepy_tools import (EarlyStopping, ExpMovingAverageSmooth,
+                                 toColVector)
 
 
 class GanCMI(nn.Module):
