@@ -11,8 +11,10 @@ Information:
 """
 
 import numpy as np
+import plotly.graph_objects as go
 import schedulefree
 import torch
+from plotly.subplots import make_subplots
 from scipy.stats import norm
 from torch import nn
 from tqdm import tqdm
@@ -77,7 +79,7 @@ class Dine(nn.Module):
         torch.device(self.device)
 
         N = X.shape[0]
-        X, Y, Z = map(lambda x: (x - np.mean(x)) / np.std(x), (X, Y, Z))
+        X, Y, Z = map(lambda x: (x - np.mean(x, axis=0)) / np.std(x, axis=0), (X, Y, Z))
         X, Y, Z = map(lambda x: torch.tensor(x).float().view(N, -1), (X, Y, Z))
 
         self.X = X.to(self.device)
@@ -149,3 +151,29 @@ class Dine(nn.Module):
 
     def get_curves(self):
         return self.val_loss_epoch, self.cmi_epoch
+
+    def plot_curves(self, title="DINE"):
+        fig = make_subplots(rows=2, cols=1)
+        fig.add_trace(
+            go.Scatter(
+                x=np.arange(self.val_loss_epoch.size),
+                y=self.val_loss_epoch,
+                name="val loss",
+            ),
+            row=1,
+            col=1,
+        )
+        fig.add_trace(
+            go.Scatter(x=np.arange(self.cmi_epoch.size), y=self.cmi_epoch, name="cmi"),
+            row=2,
+            col=1,
+        )
+        fig.add_hline(
+            y=self.get_cmi(),
+            name="Est. value",
+            line_dash="dot",
+            row=2,
+            col=1,
+        )
+        fig.update_layout(title_text=title)
+        fig.show()
