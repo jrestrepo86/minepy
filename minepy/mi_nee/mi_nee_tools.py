@@ -35,21 +35,31 @@ def minee_data_loader(X, Y, val_size=0.2, device="cuda"):
     return Xtrain, Ytrain, Xval, Yval, X, Y
 
 
-def hnee_data_loader(X, val_size=0.2, device="cuda"):
+def hnee_data_loader(X, val_size=0.2, random_sample="True", device="cuda"):
     n = X.shape[0]
     # send data top device
     X = torch.from_numpy(X)
 
-    # mix samples
-    inds = np.random.permutation(n)
-    X = X[inds, :].to(device)
-    # split data in training and validation sets
     val_size = int(val_size * n)
-    inds = torch.randperm(n)
-    (val_idx, train_idx) = (inds[:val_size], inds[val_size:])
-
-    Xtrain = X[train_idx, :]
-    Xval = X[val_idx, :]
+    if random_sample:
+        # random sampling
+        inds = np.random.permutation(n)
+        X = X[inds, :]
+        # split data in training and validation sets
+        val_idx = torch.arange(val_size)
+        train_idx = torch.arange(val_size, n)
+    else:
+        # Select contiguous validation samples starting from a random index
+        start = torch.randint(0, n - val_size + 1, (1,)).item()
+        val_idx = torch.arange(start, start + val_size)
+        # Combine indices before start and after the validation block for training
+        train_idx = torch.cat(
+            [torch.arange(0, start), torch.arange(start + val_size, n)]
+        )
+    # Extract training and validation sets
+    Xtrain = X[train_idx]
+    Xval = X[val_idx]
     Xtrain = Xtrain.to(device)
     Xval = Xval.to(device)
+    X = X.to(device)
     return Xtrain, Xval, X

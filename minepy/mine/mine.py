@@ -87,7 +87,6 @@ class MineModel(nn.Module):
         self.targetVal = targetVal
 
     def forward(self, x, y):
-
         y_marg = y[torch.randperm(y.shape[0])]
 
         t = self.model(torch.cat((x, y), dim=1)).mean()
@@ -161,6 +160,7 @@ class Mine(nn.Module):
         stop_patience=100,
         stop_min_delta=0,
         val_size=0.2,
+        random_sample="True",
         verbose=False,
     ):
         # opt = torch.optim.RMSprop(
@@ -174,7 +174,11 @@ class Mine(nn.Module):
         val_loss_ema_smooth = ExpMovingAverageSmooth()
 
         Xtrain, Ytrain, Xval, Yval, X, Y = mine_data_loader(
-            self.X, self.Y, val_size=val_size, device=self.device
+            self.X,
+            self.Y,
+            val_size=val_size,
+            random_sample=random_sample,
+            device=self.device,
         )
 
         val_loss_epoch = []

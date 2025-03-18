@@ -92,6 +92,7 @@ class HNee(nn.Module):
         stop_patience=500,
         stop_min_delta=0,
         val_size=0.2,
+        random_sample="True",
         verbose=False,
     ):
         # Optimizer
@@ -102,7 +103,7 @@ class HNee(nn.Module):
         val_loss_ema_smooth = ExpMovingAverageSmooth()
         # Data
         Xtrain, Xval, X = hnee_data_loader(
-            self.X, val_size=val_size, device=self.device
+            self.X, val_size=val_size, random_sample=random_sample, device=self.device
         )
 
         if batch_size == "full":
