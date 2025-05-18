@@ -29,12 +29,12 @@ Homepage = "https://github.com/jrestrepo86/minepy.git"
 Repository = "https://github.com/jrestrepo86/minepy"
 Issues = "https://github.com/jrestrepo86/minepy/issues"
 
-[tool.setuptools]
-package-dir = { "" = "minepy" }
-
-[tool.setuptools.packages.find]
-where = ["minepy"]
-exclude = ["tests", ".github"]
-
 [project.optional-dependencies]
 test = ["nose", "nose-cover3"]
+
+[tool.setuptools]
+package-dir = { "" = "." }
+
+[tool.setuptools.packages.find]
+where = ["."]
+exclude = ["tests", ".github"]
