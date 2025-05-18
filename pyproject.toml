@@ -14,8 +14,6 @@ authors = [{ name = "Juan F. Restrepo", email = "juan.restrepo@uner.edu.ar" }]
 keywords = ["Mutual-Information", "Neural-Networks"]
 dependencies = [
   "torch",
-  "torch_vision",
-  "pytorch_lightning",
   "scikit_learn",
   "seaborn",
   "tqdm",
@@ -35,7 +33,7 @@ Issues = "https://github.com/jrestrepo86/minepy/issues"
 package-dir = { "" = "minepy" }
 
 [tool.setuptools.packages.find]
-where = ["src"]
+where = ["minepy"]
 exclude = ["tests", ".github"]
 
 [project.optional-dependencies]
