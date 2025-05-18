@@ -1,0 +1,42 @@
+
+[build-system]
+requires = ["setuptools>=61", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "minepy"
+version = "0.2"
+description = "Mutual information neural estimation"
+readme = "README.md"
+requires-python = ">=3.6"
+license = { text = "MIT" }
+authors = [{ name = "Juan F. Restrepo", email = "juan.restrepo@uner.edu.ar" }]
+keywords = ["Mutual-Information", "Neural-Networks"]
+dependencies = [
+  "torch",
+  "torch_vision",
+  "pytorch_lightning",
+  "scikit_learn",
+  "seaborn",
+  "tqdm",
+  "numpy",
+  "matplotlib",
+  "ray",
+  "psutil",
+  "pillow",
+]
+
+[project.urls]
+Homepage = "https://github.com/jrestrepo86/minepy.git"
+Repository = "https://github.com/jrestrepo86/minepy"
+Issues = "https://github.com/jrestrepo86/minepy/issues"
+
+[tool.setuptools]
+package-dir = { "" = "minepy" }
+
+[tool.setuptools.packages.find]
+where = ["src"]
+exclude = ["tests", ".github"]
+
+[project.optional-dependencies]
+test = ["nose", "nose-cover3"]
