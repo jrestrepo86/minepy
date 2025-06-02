@@ -5,12 +5,11 @@
 import math
 
 import numpy as np
+import schedulefree
 import torch
 import torch.nn as nn
 from torch.optim.lr_scheduler import CyclicLR
 from tqdm import tqdm
-import schedulefree
-
 
 from minepy.mine.mine_tools import mine_data_loader
 from minepy.minepy_tools import (
@@ -60,7 +59,7 @@ class MineModel(nn.Module):
     def __init__(
         self,
         input_dim,
-        hidden_layers=[64, 32, 16, 8],
+        hidden_layers=[64, 64, 32],
         afn="gelu",
         loss="mine",
         alpha=0.01,
@@ -148,8 +147,7 @@ class Mine(nn.Module):
             alpha=alpha,
             regWeight=regWeight,
             targetVal=targetVal,
-        )
-        self.model = self.model.to(self.device)
+        ).to(self.device)
 
     def fit(
         self,
@@ -160,7 +158,7 @@ class Mine(nn.Module):
         stop_patience=100,
         stop_min_delta=0,
         val_size=0.2,
-        random_sample="True",
+        random_sample=True,
         verbose=False,
     ):
         # opt = torch.optim.RMSprop(
@@ -191,7 +189,7 @@ class Mine(nn.Module):
             rand_perm = torch.randperm(Xtrain.shape[0])
             if batch_size == "full":
                 batch_size = Xtrain.shape[0]
-            self.train()
+            self.model.train()
             opt.train()
             for inds in rand_perm.split(batch_size, dim=0):
                 with torch.set_grad_enabled(True):
@@ -201,14 +199,14 @@ class Mine(nn.Module):
                     opt.step()
 
             # validate and testing
-            self.eval()
+            self.model.eval()
             opt.eval()
             with torch.set_grad_enabled(False):
                 # validate
                 val_loss, val_mi = self.model(Xval, Yval)
                 val_loss_epoch.append(val_loss.item())
-                val_ema_loss = val_loss_ema_smooth(val_loss)
-                val_ema_loss_epoch.append(val_ema_loss.item())
+                val_ema_loss = val_loss_ema_smooth(val_loss.item())
+                val_ema_loss_epoch.append(val_ema_loss)
                 val_mi_epoch.append(val_mi.item())
 
                 # scheduler.step() # learning rate scheduler

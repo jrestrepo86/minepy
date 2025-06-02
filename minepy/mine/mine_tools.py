@@ -9,7 +9,7 @@ import numpy as np
 import torch
 
 
-def mine_data_loader(X, Y, val_size=0.2, random_sample="True", device="cuda"):
+def mine_data_loader(X, Y, val_size=0.2, random_sample=True, device="cuda"):
     n = X.shape[0]
     # send data top device
     X = torch.from_numpy(X)

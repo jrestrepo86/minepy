@@ -1,40 +1,49 @@
-
 [build-system]
-requires = ["setuptools>=61", "wheel"]
 build-backend = "setuptools.build_meta"
+
+requires = [ "setuptools>=61", "wheel" ]
 
 [project]
 name = "minepy"
 version = "0.2"
 description = "Mutual information neural estimation"
 readme = "README.md"
-requires-python = ">=3.6"
+keywords = [ "Mutual-Information", "Neural-Networks" ]
 license = { text = "MIT" }
-authors = [{ name = "Juan F. Restrepo", email = "juan.restrepo@uner.edu.ar" }]
-keywords = ["Mutual-Information", "Neural-Networks"]
+authors = [ { name = "Juan F. Restrepo", email = "juan.restrepo@uner.edu.ar" } ]
+requires-python = ">=3.6"
+classifiers = [
+  "Programming Language :: Python :: 3 :: Only",
+  "Programming Language :: Python :: 3.6",
+  "Programming Language :: Python :: 3.7",
+  "Programming Language :: Python :: 3.8",
+  "Programming Language :: Python :: 3.9",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+]
 dependencies = [
-  "torch",
-  "scikit_learn",
-  "seaborn",
-  "tqdm",
-  "numpy",
   "matplotlib",
-  "ray",
-  "psutil",
+  "numpy",
   "pillow",
+  "psutil",
+  "ray",
+  "schedulefree",
+  "scikit-learn",
+  "seaborn",
+  "torch",
+  "tqdm",
 ]
 
-[project.urls]
-Homepage = "https://github.com/jrestrepo86/minepy.git"
-Repository = "https://github.com/jrestrepo86/minepy"
-Issues = "https://github.com/jrestrepo86/minepy/issues"
-
-[project.optional-dependencies]
-test = ["nose", "nose-cover3"]
+optional-dependencies.test = [ "nose", "nose-cover3" ]
+urls.Homepage = "https://github.com/jrestrepo86/minepy.git"
+urls.Issues = "https://github.com/jrestrepo86/minepy/issues"
+urls.Repository = "https://github.com/jrestrepo86/minepy"
 
 [tool.setuptools]
 package-dir = { "" = "." }
 
 [tool.setuptools.packages.find]
-where = ["."]
-exclude = ["tests", ".github"]
+where = [ "." ]
+exclude = [ "tests", ".github" ]
