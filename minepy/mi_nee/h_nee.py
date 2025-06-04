@@ -5,10 +5,10 @@
 import math
 
 import numpy as np
+import schedulefree
 import torch
 import torch.nn as nn
 from tqdm import tqdm
-import schedulefree
 
 from minepy.mi_nee.mi_nee_tools import hnee_data_loader
 from minepy.minepy_tools import (
@@ -56,7 +56,7 @@ class HNee(nn.Module):
         self,
         X,
         hidden_layers=[150, 150, 150],
-        afn="gelu",
+        afn="elu",
         device=None,
     ):
         super().__init__()
@@ -87,16 +87,23 @@ class HNee(nn.Module):
         self,
         batch_size=64,
         max_epochs=2000,
-        lr=1e-3,
         ref_batch_factor=4,
+        lr=1e-3,
+        weight_decay=5e-5,
+        warmup_epochs=100,
         stop_patience=500,
         stop_min_delta=0,
         val_size=0.2,
-        random_sample="True",
+        random_sample=True,
         verbose=False,
     ):
         # Optimizer
-        opt = schedulefree.AdamWScheduleFree(self.model.parameters(), lr=lr)
+        opt = schedulefree.AdamWScheduleFree(
+            self.model.parameters(),
+            lr=lr,
+            weight_decay=weight_decay,
+            warmup_steps=warmup_epochs,
+        )
         # Early stopping
         early_stopping = EarlyStopping(patience=stop_patience, delta=stop_min_delta)
         # Smooth val loss

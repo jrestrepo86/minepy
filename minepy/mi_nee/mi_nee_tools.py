@@ -35,7 +35,7 @@ def minee_data_loader(X, Y, val_size=0.2, device="cuda"):
     return Xtrain, Ytrain, Xval, Yval, X, Y
 
 
-def hnee_data_loader(X, val_size=0.2, random_sample="True", device="cuda"):
+def hnee_data_loader(X, val_size=0.2, random_sample=True, device="cuda"):
     n = X.shape[0]
     # send data top device
     X = torch.from_numpy(X)

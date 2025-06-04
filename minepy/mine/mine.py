@@ -155,6 +155,7 @@ class Mine(nn.Module):
         max_epochs=2000,
         lr=1e-3,
         weight_decay=5e-5,
+        warmup_epochs=100,
         stop_patience=100,
         stop_min_delta=0,
         val_size=0.2,
@@ -165,11 +166,19 @@ class Mine(nn.Module):
         #     self.model.parameters(), lr=lr, weight_decay=weight_decay
         # )
         # scheduler = CyclicLR(opt, base_lr=lr, max_lr=1e-3, mode="triangular2")
-        opt = schedulefree.AdamWScheduleFree(self.model.parameters(), lr=lr)
+        opt = schedulefree.AdamWScheduleFree(
+            self.model.parameters(),
+            lr=lr,
+            weight_decay=weight_decay,
+            warmup_steps=warmup_epochs,
+        )
 
-        early_stopping = EarlyStopping(patience=stop_patience, delta=stop_min_delta)
+        early_stopping = EarlyStopping(
+            patience=stop_patience + warmup_epochs, delta=stop_min_delta
+        )
 
         val_loss_ema_smooth = ExpMovingAverageSmooth()
+        test_mi_ema_smooth = ExpMovingAverageSmooth()
 
         Xtrain, Ytrain, Xval, Yval, X, Y = mine_data_loader(
             self.X,
@@ -183,6 +192,7 @@ class Mine(nn.Module):
         val_ema_loss_epoch = []
         val_mi_epoch = []
         test_mi_epoch = []
+        test_mi_ema_epoch = []
 
         for _ in tqdm(range(max_epochs), disable=not verbose):
             # training
@@ -216,6 +226,7 @@ class Mine(nn.Module):
                 # testing
                 _, test_mi = self.model(X, Y)
                 test_mi_epoch.append(test_mi.item())
+                test_mi_ema_epoch.append(test_mi_ema_smooth(test_mi.item()))
 
             if early_stopping.early_stop:
                 break
@@ -224,11 +235,13 @@ class Mine(nn.Module):
         self.val_mi_epoch = np.array(val_mi_epoch)
         self.val_ema_loss_epoch = np.array(val_ema_loss_epoch)
         self.test_mi_epoch = np.array(test_mi_epoch)
+        self.test_mi_ema_epoch = np.array(test_mi_ema_epoch)
 
     def get_mi(self, all=False):
         ind_min_ema_loss = np.argmin(self.val_ema_loss_epoch)
         mi_val = self.val_mi_epoch[ind_min_ema_loss]
         mi_test = self.test_mi_epoch[ind_min_ema_loss]
+        mi_ema_test = self.test_mi_ema_epoch[ind_min_ema_loss]
         fepoch = self.val_ema_loss_epoch.size
         if all:
             return mi_val, mi_test, ind_min_ema_loss, fepoch
