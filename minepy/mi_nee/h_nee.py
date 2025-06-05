@@ -5,6 +5,8 @@
 import math
 
 import numpy as np
+import pandas as pd
+import plotly.express as px
 import schedulefree
 import torch
 import torch.nn as nn
@@ -105,9 +107,15 @@ class HNee(nn.Module):
             warmup_steps=warmup_epochs,
         )
         # Early stopping
-        early_stopping = EarlyStopping(patience=stop_patience, delta=stop_min_delta)
+        early_stopping = EarlyStopping(
+            patience=stop_patience + warmup_epochs, delta=stop_min_delta
+        )
         # Smooth val loss
         val_loss_ema_smooth = ExpMovingAverageSmooth()
+        val_h_ema_smooth = ExpMovingAverageSmooth()
+        test_loss_ema_smooth = ExpMovingAverageSmooth()
+        test_h_ema_smooth = ExpMovingAverageSmooth()
+
         # Data
         Xtrain, Xval, X = hnee_data_loader(
             self.X, val_size=val_size, random_sample=random_sample, device=self.device
@@ -117,12 +125,8 @@ class HNee(nn.Module):
             batch_size = Xtrain.shape[0]
         self.n_ref_samples = int(batch_size * ref_batch_factor)
 
-        val_loss_epoch = []
-        val_ema_loss_epoch = []
-        val_h_epoch = []
-        test_h_epoch = []
-
-        for _ in tqdm(range(max_epochs), disable=not verbose):
+        indicators = []
+        for epoch in tqdm(range(max_epochs), disable=not verbose):
             # training
             rand_perm = torch.randperm(Xtrain.shape[0])
             self.train()
@@ -142,43 +146,88 @@ class HNee(nn.Module):
                 # validate
                 ref_samp = self.ref_sample_(Xval)
                 val_loss = self.model(Xval, ref_samp)
-                val_loss_epoch.append(val_loss.item())
-                val_ema_loss = val_loss_ema_smooth(val_loss)
-                val_ema_loss_epoch.append(val_ema_loss.item())
-
-                h_ref = self.href + val_loss
-                val_h_epoch.append(h_ref.item())
-
-                early_stopping(val_ema_loss)  # early stopping
+                val_h = self.href + val_loss
+                val_ema_loss = val_loss_ema_smooth(val_loss.item())
+                val_ema_h = val_h_ema_smooth(val_h.item())
 
                 # testing
                 ref_samp = self.ref_sample_(X)
                 test_loss = self.model(X, ref_samp)
-                h_ref = self.href + test_loss
-                test_h_epoch.append(h_ref.item())
+                test_h = self.href + test_loss
+                test_ema_loss = test_loss_ema_smooth(test_loss.item())
+                test_ema_h = test_h_ema_smooth(test_h.item())
+
+                indicators.append(
+                    {
+                        "epoch": epoch,
+                        "val_loss": val_loss.item(),
+                        "val_ema_loss": val_ema_loss,
+                        "val_h": val_h.item(),
+                        "val_ema_h": val_ema_h,
+                        "test_loss": test_loss.item(),
+                        "test_ema_loss": test_ema_loss,
+                        "test_h": test_h.item(),
+                        "test_ema_h": test_ema_h,
+                    }
+                )
+
+                early_stopping(val_ema_loss)  # early stopping
 
             if early_stopping.early_stop:
                 break
 
-        self.val_loss_epoch = np.array(val_loss_epoch)
-        self.val_h_epoch = np.array(val_h_epoch)
-        self.val_ema_loss_epoch = np.array(val_ema_loss_epoch)
-        self.test_h_epoch = np.array(test_h_epoch)
+        self.indicators = pd.DataFrame(indicators)
 
     def get_h(self, all=False):
-        ind_min_ema_loss = np.argmin(self.val_ema_loss_epoch)
-        h_val = self.val_h_epoch[ind_min_ema_loss]
-        h_test = self.test_h_epoch[ind_min_ema_loss]
-        fepoch = self.val_ema_loss_epoch.size
+        if not hasattr(self, "indicators") or self.indicators.empty:
+            raise ValueError("No indicators available. Have you called .fit()?")
+
+        min_ind = self.indicators["val_ema_loss"].idxmin()
+        h_ema_test = self.indicators.at[min_ind, "test_ema_h"]
+        h_test = self.indicators.at[min_ind, "test_h"]
+
         if all:
-            return h_val, h_test, ind_min_ema_loss, fepoch
+            h_val = self.indicators.at[min_ind, "val_h"]
+            fepoch = self.indicators.at[min_ind, "epoch"]
+            return h_val, h_test, h_ema_test, min_ind, fepoch
         else:
             return h_test
 
     def get_curves(self):
-        return (
-            self.val_loss_epoch,
-            self.val_ema_loss_epoch,
-            self.val_h_epoch,
-            self.test_h_epoch,
+        if not hasattr(self, "indicators") or self.indicators.empty:
+            raise ValueError("No indicators available. Have you called .fit()?")
+        return self.indicators
+
+    def plot_indicators(self):
+        if not hasattr(self, "indicators") or self.indicators.empty:
+            raise ValueError("No indicators to plot. Did you call .fit()?")
+
+        # Reshape the DataFrame to long format for px.line
+        df_plot = self.indicators.melt(
+            id_vars="epoch",
+            value_vars=[
+                "val_loss",
+                "val_ema_loss",
+                "val_h",
+                "val_ema_h",
+                "test_loss",
+                "test_ema_loss",
+                "test_h",
+                "test_ema_h",
+            ],
+            var_name="Indicator",
+            value_name="Value",
         )
+
+        fig = px.line(
+            df_plot,
+            x="epoch",
+            y="Value",
+            color="Indicator",
+            markers=True,
+            title="Training Indicators vs Epochs",
+            labels={"epoch": "Epoch", "Value": "Value"},
+        )
+
+        fig.update_layout(template="plotly_white")
+        fig.show()

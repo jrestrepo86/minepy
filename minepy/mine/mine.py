@@ -5,6 +5,8 @@
 import math
 
 import numpy as np
+import pandas as pd
+import plotly.express as px
 import schedulefree
 import torch
 import torch.nn as nn
@@ -15,6 +17,7 @@ from minepy.mine.mine_tools import mine_data_loader
 from minepy.minepy_tools import (
     EarlyStopping,
     ExpMovingAverageSmooth,
+    MovingAverageSmooth,
     get_activation_fn,
     toColVector,
 )
@@ -178,6 +181,7 @@ class Mine(nn.Module):
         )
 
         val_loss_ema_smooth = ExpMovingAverageSmooth()
+        val_mi_ema_smooth = ExpMovingAverageSmooth()
         test_mi_ema_smooth = ExpMovingAverageSmooth()
 
         Xtrain, Ytrain, Xval, Yval, X, Y = mine_data_loader(
@@ -188,13 +192,8 @@ class Mine(nn.Module):
             device=self.device,
         )
 
-        val_loss_epoch = []
-        val_ema_loss_epoch = []
-        val_mi_epoch = []
-        test_mi_epoch = []
-        test_mi_ema_epoch = []
-
-        for _ in tqdm(range(max_epochs), disable=not verbose):
+        indicators = []
+        for epoch in tqdm(range(max_epochs), disable=not verbose):
             # training
             rand_perm = torch.randperm(Xtrain.shape[0])
             if batch_size == "full":
@@ -214,44 +213,80 @@ class Mine(nn.Module):
             with torch.set_grad_enabled(False):
                 # validate
                 val_loss, val_mi = self.model(Xval, Yval)
-                val_loss_epoch.append(val_loss.item())
                 val_ema_loss = val_loss_ema_smooth(val_loss.item())
-                val_ema_loss_epoch.append(val_ema_loss)
-                val_mi_epoch.append(val_mi.item())
-
-                # scheduler.step() # learning rate scheduler
-
-                early_stopping(val_ema_loss)  # early stopping
+                val_ema_mi = val_mi_ema_smooth(val_mi.item())
 
                 # testing
                 _, test_mi = self.model(X, Y)
-                test_mi_epoch.append(test_mi.item())
-                test_mi_ema_epoch.append(test_mi_ema_smooth(test_mi.item()))
+                test_ema_mi = test_mi_ema_smooth(test_mi.item())
+
+                indicators.append(
+                    {
+                        "epoch": epoch,
+                        "val_loss": val_loss.item(),
+                        "val_ema_loss": val_ema_loss,
+                        "val_mi": val_mi.item(),
+                        "val_ema_mi": val_ema_mi,
+                        "test_mi": test_mi.item(),
+                        "test_ema_mi": test_ema_mi,
+                    }
+                )
+
+                early_stopping(val_ema_loss)  # early stopping
 
             if early_stopping.early_stop:
                 break
 
-        self.val_loss_epoch = np.array(val_loss_epoch)
-        self.val_mi_epoch = np.array(val_mi_epoch)
-        self.val_ema_loss_epoch = np.array(val_ema_loss_epoch)
-        self.test_mi_epoch = np.array(test_mi_epoch)
-        self.test_mi_ema_epoch = np.array(test_mi_ema_epoch)
+        self.indicators = pd.DataFrame(indicators)
 
     def get_mi(self, all=False):
-        ind_min_ema_loss = np.argmin(self.val_ema_loss_epoch)
-        mi_val = self.val_mi_epoch[ind_min_ema_loss]
-        mi_test = self.test_mi_epoch[ind_min_ema_loss]
-        mi_ema_test = self.test_mi_ema_epoch[ind_min_ema_loss]
-        fepoch = self.val_ema_loss_epoch.size
+        if not hasattr(self, "indicators") or self.indicators.empty:
+            raise ValueError("No indicators available. Have you called .fit()?")
+
+        min_ind = self.indicators["val_ema_loss"].idxmin()
+        mi_ema_test = self.indicators.at[min_ind, "test_ema_mi"]
+        mi_test = self.indicators.at[min_ind, "test_mi"]
+
         if all:
-            return mi_val, mi_test, ind_min_ema_loss, fepoch
+            mi_val = self.indicators.at[min_ind, "val_ema_mi"]
+            fepoch = self.indicators.at[min_ind, "epoch"]
+            return mi_val, mi_test, mi_ema_test, min_ind, fepoch
         else:
             return mi_test
 
     def get_curves(self):
-        return (
-            self.val_loss_epoch,
-            self.val_ema_loss_epoch,
-            self.val_mi_epoch,
-            self.test_mi_epoch,
+        if not hasattr(self, "indicators") or self.indicators.empty:
+            raise ValueError("No indicators available. Have you called .fit()?")
+        return self.indicators
+
+    def plot_indicators(self):
+        if not hasattr(self, "indicators") or self.indicators.empty:
+            raise ValueError("No indicators to plot. Did you call .fit()?")
+
+        # Reshape the DataFrame to long format for px.line
+        df_plot = self.indicators.melt(
+            id_vars="epoch",
+            value_vars=[
+                "val_loss",
+                "val_ema_loss",
+                "val_mi",
+                "val_ema_mi",
+                "test_mi",
+                "test_ema_mi",
+            ],
+            var_name="Indicator",
+            value_name="Value",
         )
+
+        fig = px.line(
+            df_plot,
+            x="epoch",
+            y="Value",
+            color="Indicator",
+            markers=True,
+            title="Training Indicators vs Epochs",
+            labels={"epoch": "Epoch", "Value": "Value"},
+        )
+
+        fig.update_layout(template="plotly_white")
+        fig.show()
