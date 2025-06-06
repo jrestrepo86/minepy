@@ -24,13 +24,15 @@ classifiers = [
   "Programming Language :: Python :: 3.13",
 ]
 dependencies = [
-  "matplotlib",
   "numpy",
+  "pandas",
   "pillow",
+  "plotly",
   "psutil",
   "ray",
   "schedulefree",
   "scikit-learn",
+  "scipy",
   "seaborn",
   "torch",
   "tqdm",

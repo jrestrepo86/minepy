@@ -200,8 +200,8 @@ class Mine(nn.Module):
                 batch_size = Xtrain.shape[0]
             self.model.train()
             opt.train()
-            for inds in rand_perm.split(batch_size, dim=0):
-                with torch.set_grad_enabled(True):
+            with torch.set_grad_enabled(True):
+                for inds in rand_perm.split(batch_size, dim=0):
                     opt.zero_grad()
                     train_loss, _ = self.model(Xtrain[inds, :], Ytrain[inds, :])
                     train_loss.backward()
